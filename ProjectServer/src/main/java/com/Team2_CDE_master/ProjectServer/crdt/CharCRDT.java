@@ -1,19 +1,12 @@
 package com.Team2_CDE_master.ProjectServer.crdt;
-
 import java.util.ArrayList;
-
-// this is the main character-level CRDT
-// it holds a list of all character nodes in order
-// think of it like a linked list but stored in an arraylist
 public class CharCRDT {
-
     // all the nodes — including deleted ones (tombstones)
     ArrayList<CharNode> allNodes;
 
     public CharCRDT() {
         allNodes = new ArrayList<>();
     }
-
     // insert a new character node into the list
     // it goes right after its parent
     // if two chars have the same parent (concurrent insert), we use siteId to break the tie
@@ -30,7 +23,6 @@ public class CharCRDT {
                 }
             }
         }
-
         // now figure out where exactly to insert
         // we start right after the parent and skip any siblings that have a higher siteId
         // (higher siteId wins → goes first — Member 4 will refine this logic)
