@@ -447,4 +447,338 @@ public class ProjectServerApplicationTests {
 
 		System.out.println("Split-then-merge round-trip test PASSED\n");
 	}
+
+//tests formatting:
+
+// Test A: same parent, different siteId
+// Two users type at the same spot at the same time
+// Higher siteId should always end up on the left (aka typed first)
+	@Test
+	void testDeterministicOrderBySiteId() {
+		System.out.println("===== Test A: Deterministic Order by siteId =====\n");
+
+		CharCRDT doc = new CharCRDT();
+
+		// first user types "A"
+		CharID anchorId = new CharID(1, 1);
+		doc.addChar(new CharNode(anchorId, null, 'A'));
+
+		// both users type at the same exact time (after the first 'A')
+		// 2nd user's entered should go first (cuz higher siteID)
+		CharID user1Id = new CharID(1, 2);
+		CharID user2Id = new CharID(2, 1);
+
+		CharNode nodeFromUser1 = new CharNode(user1Id, anchorId, 'X');
+		CharNode nodeFromUser2 = new CharNode(user2Id, anchorId, 'Y');
+
+		// assume we got user1's first (to show the ordering)
+		doc.addChar(nodeFromUser1);
+		doc.addChar(nodeFromUser2);
+
+		System.out.println("Expected: AYX");
+		System.out.println("Got: " + doc.getText());
+
+		assert doc.getText().equals("AYX") : "Expected AYX, got: " + doc.getText();
+
+		System.out.println("Farah's Test A PASSED :)\n");
+	}
+
+// Test B: same parent, same siteId, different myNum
+// this only happens in edge cases but we still need deterministic order
+// higher myNum should be typed first
+	@Test
+	void testDeterministicOrderByMyNum() {
+		System.out.println("===== Test B: Deterministic Order by myNum =====\n");
+
+		CharCRDT doc = new CharCRDT();
+
+
+		CharID anchorId = new CharID(1, 1);
+		doc.addChar(new CharNode(anchorId, null, 'A'));
+
+		// same siteId=1 and dif myNUm (highNum should be tyoed first)
+		CharID lowNum  = new CharID(1, 2);   // myNum=2
+		CharID highNum = new CharID(1, 5);   // myNum=5
+
+		CharNode nodeLow  = new CharNode(lowNum,  anchorId, 'L');
+		CharNode nodeHigh = new CharNode(highNum, anchorId, 'H');
+
+		doc.addChar(nodeLow);
+		doc.addChar(nodeHigh);//high should still end up first
+
+		System.out.println("Expected: AHL");
+		System.out.println("Got: " + doc.getText());
+
+		assert doc.getText().equals("AHL") : "Expected AHL, got: " + doc.getText();
+
+		System.out.println("Farah's Test B PASSED :)\n");
+	}
+
+// Test C: insert order should not matter
+// Insert the same two concurrent nodes in reversed order
+// Should get the same result both times
+	@Test
+	void testDeterministicOrderIsStable() {
+		System.out.println("===== Test C: Order is Stable Regardless of Insert Order =====\n");
+
+		// first doc: insert user2 first, then user1
+		CharCRDT docA = new CharCRDT();
+		CharID anchor_A = new CharID(1, 1);
+		docA.addChar(new CharNode(anchor_A, null, 'A'));
+
+		CharID u1_A = new CharID(1, 2);
+		CharID u2_A = new CharID(2, 1);
+		docA.addChar(new CharNode(u2_A, anchor_A, 'Y'));   // user2 inserted first
+		docA.addChar(new CharNode(u1_A, anchor_A, 'X'));   // user1 inserted second
+
+		// 2nd doc: insert user1 first, then user2 (reversed)
+		CharCRDT docB = new CharCRDT();
+		CharID anchor_B = new CharID(1, 1);
+		docB.addChar(new CharNode(anchor_B, null, 'A'));
+
+		CharID u1_B = new CharID(1, 2);
+		CharID u2_B = new CharID(2, 1);//should still print first no matter what
+		docB.addChar(new CharNode(u1_B, anchor_B, 'X'));   // user1 inserted first
+		docB.addChar(new CharNode(u2_B, anchor_B, 'Y'));   // user2 inserted second
+//the expected is that it will always be the same order no matter nsertion because the order
+		//is based on siteID not the "insert order"
+		//this is basically making sure it is robust
+		System.out.println("Doc A (inserted user2 first): " + docA.getText());
+		System.out.println("Doc B (inserted user1 first): " + docB.getText());
+
+		// both docs must end up the same
+		assert docA.getText().equals(docB.getText()) : "Expected same text in both docs, got " + docA.getText() + " vs " + docB.getText();
+		assert docA.getText().equals("AYX") : "Expected AYX, got " + docA.getText();
+
+		System.out.println("Farah's Test C PASSED :)\n");
+	}
+
+// Test D: apply bold to one character
+// just making sure setBold works and only the highlightd character is bold
+	@Test
+	void testApplyBold() {
+		System.out.println("===== Test D: Apply Bold =====\n");
+
+		CharCRDT doc = new CharCRDT();
+
+		CharID id1 = new CharID(1, 1);
+		CharID id2 = new CharID(1, 2);
+		CharID id3 = new CharID(1, 3);
+
+		CharNode nodeH = new CharNode(id1, null,  'H');
+		CharNode nodeI = new CharNode(id2, id1,   'i');
+		CharNode nodeExc = new CharNode(id3, id2,   '!');
+
+		doc.addChar(nodeH);
+		doc.addChar(nodeI);
+		doc.addChar(nodeExc);
+
+		// bold 'i'
+		FormattingOperation boldOp = new FormattingOperation( id2, "bold", true);
+		boldOp.apply(doc);
+
+		System.out.println("After bolding 'i':");
+		doc.printAll();
+
+		// only 'i' should be bold
+		assert doc.findNode(id1).checkBold() == false : "H should not be bold";
+		assert doc.findNode(id2).checkBold() == true  : "i should be bold";
+		assert doc.findNode(id3).checkBold() == false : "! should not be bold";
+
+		System.out.println("Farah's Test D PASSED :)\n");
+	}
+
+// Test E: applying italic to one character
+// same idea as bold test bs for italic
+	@Test
+	void testApplyItalic() {
+		System.out.println("===== Test E: Apply Italic =====\n");
+
+		CharCRDT doc = new CharCRDT();
+
+		CharID id1 = new CharID(1, 1);
+		CharID id2 = new CharID(1, 2);
+
+		doc.addChar(new CharNode(id1, null, 'O'));
+		doc.addChar(new CharNode(id2, id1,  'k'));
+
+		// make 'O' italic
+		FormattingOperation italicOp = new FormattingOperation(id1, "italic", true);
+		italicOp.apply(doc);
+
+		System.out.println("After italicizing 'O':");
+		doc.printAll();
+
+		assert doc.findNode(id1).checkItalic() == true  : "O should be italic";
+		assert doc.findNode(id2).checkItalic() == false : "k should not be italic";
+
+		System.out.println("Farah's Test E PASSED :)\n");
+	}
+
+// Test F: apply both bold AND italic to the same character
+// make sure one does not overwrite the other
+	@Test
+	void testApplyBoldAndItalicSameChar() {
+		System.out.println("===== Test F: Bold and Italic on Same Char =====\n");
+
+		CharCRDT doc = new CharCRDT();
+
+		CharID id1 = new CharID(1, 1);
+		CharID id2 = new CharID(1, 2);
+		CharID id3 = new CharID(1, 3);
+
+		doc.addChar(new CharNode(id1, null, 'H'));
+		doc.addChar(new CharNode(id2, id1,  'i'));
+		doc.addChar(new CharNode(id3, id2,  '!'));
+
+		// bold 'i' first then italic it
+		// (both should be true at the end)
+		FormattingOperation boldOp   = new FormattingOperation( id2, "bold",   true);
+		FormattingOperation italicOp = new FormattingOperation(id2, "italic", true);
+		boldOp.apply(doc);
+		italicOp.apply(doc);
+
+		System.out.println("After bold + italic on 'i':");
+		doc.printAll();
+
+		assert doc.findNode(id2).checkBold()   == true  : "i should be bold";
+		assert doc.findNode(id2).checkItalic() == true  : "i should also be italic";
+
+		// make sure the other chars were not touched
+		assert doc.findNode(id1).checkBold()   == false : "H should not be bold";
+		assert doc.findNode(id1).checkItalic() == false : "H should not be italic";
+		assert doc.findNode(id3).checkBold()   == false : "! should not be bold";
+		assert doc.findNode(id3).checkItalic() == false : "! should not be italic";
+
+		System.out.println("Farah's Test F PASSED :)\n");
+	}
+
+// Test G: turn bold off after turning it on
+// basically making sure we can toggle formatting back to false
+	@Test
+	void testRemoveBold() {
+		System.out.println("===== Test G: Remove Bold =====\n");
+
+		CharCRDT doc = new CharCRDT();
+
+		CharID id1 = new CharID(1, 1);
+		doc.addChar(new CharNode(id1, null, 'Z'));
+
+		// turn bold on
+		FormattingOperation boldOn = new FormattingOperation( id1, "bold", true);
+		boldOn.apply(doc);
+		assert doc.findNode(id1).checkBold() == true : "Z should be bold after turning on";
+
+		// turn bold off
+		FormattingOperation boldOff = new FormattingOperation(id1, "bold", false);
+		boldOff.apply(doc);
+		assert doc.findNode(id1).checkBold() == false : "Z should not be bold after turning off";
+
+		System.out.println("we turned bold on then off:");
+		doc.printAll();
+
+		System.out.println("Farah's Test G PASSED :)\n");
+	}
+
+// Test H: formatting on a deleted character should do nothing
+	@Test
+	void testFormattingOnDeletedNodeDoesNothing() {
+		System.out.println("===== Test H: Formatting on Deleted Node Does Nothing =====\n");
+
+		CharCRDT doc = new CharCRDT();
+
+		CharID id1 = new CharID(1, 1);
+		CharNode node = new CharNode(id1, null, 'X');
+		doc.addChar(node);
+
+
+		node.markDeleted();
+		assert node.checkDeleted() == true : "Node should be deleted";
+
+		// now try to bold it (should be ignored)
+		FormattingOperation boldOp = new FormattingOperation(id1, "bold", true);
+		boldOp.apply(doc);
+
+		// bold should still be false because the node was deleted
+		assert doc.findNode(id1).checkBold() == false : "Deleted node should not get bold applied";
+
+		System.out.println("After trying to bold a deleted node:");
+		doc.printAll();
+
+		System.out.println("Farah's Test H PASSED :)\n");
+	}
+
+// Test I: formatting on a node that does not exist should not crash
+//not sure when we'll actually use this tho but might as well
+//note to self: ask the TA whether this is the correct logic or not cuz it makes sense
+//in my head but I'm not if this is correct or not
+	@Test
+	void testFormattingOnMissingNodeDoesNotCrash() {
+		System.out.println("===== Test I: Formatting on Missing Node Does Not Crash =====\n");
+
+		CharCRDT doc = new CharCRDT();
+
+		CharID id1 = new CharID(1, 1);
+		doc.addChar(new CharNode(id1, null, 'A'));
+
+		// try to format a node that never existed
+		CharID fakeId = new CharID(9, 99);
+		FormattingOperation boldOp = new FormattingOperation(fakeId, "bold", true);
+		boldOp.apply(doc);   // should not throw any exception
+
+		System.out.println("didnt crash - test passed.");
+		//note to self: ask the TA whether this is the correct logic or not cuz it makes sense
+		//in my head but I'm not if this is correct or not
+		System.out.println("Farah's Test I PASSED :)\n");
+	}
+
+
+//#note to self: in the future when dealing with bold and italics
+// the way to go about it is to loop over the selected bunch of characters to be bold/italics
+//and loop over them applying italic/bold
+//something like this:
+
+// note test
+// simulates the user selecting "ell" inside "Hello" and hitting bold
+@Test
+void testApplyBoldOnSelectedText() {
+	System.out.println("===== Bold on Selected Text =====\n");
+
+	CharCRDT doc = new CharCRDT();
+
+	CharID id1 = new CharID(1, 1);
+	CharID id2 = new CharID(1, 2);
+	CharID id3 = new CharID(1, 3);
+	CharID id4 = new CharID(1, 4);
+	CharID id5 = new CharID(1, 5);
+
+	doc.addChar(new CharNode(id1, null, 'H'));
+	doc.addChar(new CharNode(id2, id1,  'e'));
+	doc.addChar(new CharNode(id3, id2,  'l'));
+	doc.addChar(new CharNode(id4, id3,  'l'));
+	doc.addChar(new CharNode(id5, id4,  'o'));
+
+	// selection = "ell" = id2, id3, id4
+	CharID[] selection = { id2, id3, id4 }; //assume this is the seleted ids
+	// i'd loop over the selected ids and apply one by one
+	for (CharID selectedId : selection) {
+		FormattingOperation boldOp = new FormattingOperation(selectedId, "bold", true);
+		boldOp.apply(doc);
+	}
+
+	System.out.println("After bolding 'ell' in 'Hello':");
+	doc.printAll();
+
+	// H and o should NOT be bold
+	assert doc.findNode(id1).checkBold() == false : "H should not be bold";
+	assert doc.findNode(id5).checkBold() == false : "o should not be bold";
+
+	// e, l, l should all be bold
+	assert doc.findNode(id2).checkBold() == true : "e should be bold";
+	assert doc.findNode(id3).checkBold() == true : "first l should be bold";
+	assert doc.findNode(id4).checkBold() == true : "second l should be bold";
+
+	System.out.println("Farah's Test note PASSED\n");
+}
+
 }

@@ -47,12 +47,30 @@ public class CharCRDT {
                 sameParent = current.getParentId().isSameAs(newNode.getParentId());
             }
 
+//            if (sameParent) {
+//                // tie-breaker: higher siteId goes first (left side)
+//                if (current.getMyId().siteId > newNode.getMyId().siteId) {
+//                    insertAt++;   // skip this sibling, it wins
+//                } else {
+//                    break;        // our new node wins, insert here
+//                }
+//            } else {
+//                break;   // no more siblings, stop here
+//            }
+           //deterministic ordering (Farah Elhebeishy)
             if (sameParent) {
-                // tie-breaker: higher siteId goes first (left side)
+                // higher siteId is supposed to be typed first
                 if (current.getMyId().siteId > newNode.getMyId().siteId) {
-                    insertAt++;   // skip this sibling, it wins
+                    insertAt++;   // current wins, skip it
+                } else if (current.getMyId().siteId == newNode.getMyId().siteId) {
+                    // same siteId -> break tie using myNum, higher myNum goes first
+                    if (current.getMyId().myNum > newNode.getMyId().myNum) {
+                        insertAt++;   // current wins, skip it
+                    } else {
+                        break;        // new node wins, insert here
+                    }
                 } else {
-                    break;        // our new node wins, insert here
+                    break;   // new node wins (higher siteId), insert here
                 }
             } else {
                 break;   // no more siblings, stop here
@@ -81,6 +99,29 @@ public class CharCRDT {
             }
         }
         return null;
+    }
+    // applying bold or italic formatting to a node by its id
+    // type = "bold" or "italic"
+    // value = true to turn on, false to turn off
+    // does nothing if the node is deleted or not found
+    public void applyFormatting(CharID targetId, String type, boolean value) {
+        CharNode node = findNode(targetId);
+
+        // if node not found or already deleted, do nothing
+        if (node == null) {
+            return;
+        }
+        if (node.checkDeleted()) {
+            return;
+        }
+
+        // apply the right formatting
+        if (type.equals("bold")) {
+            node.setBold(value);
+        } else if (type.equals("italic")) {
+            node.setItalic(value);
+        }
+        // if type is something else, just ignore it
     }
 
     // print all nodes including tombstones (for debugging)
