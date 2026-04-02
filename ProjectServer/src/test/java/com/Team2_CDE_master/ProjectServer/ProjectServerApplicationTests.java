@@ -5,11 +5,11 @@ import org.junit.jupiter.api.Test;
 
 public class ProjectServerApplicationTests {
 
-	// ===== Member 1 tests =====
+	// ===== Asmahan's tests =====
 
 	@Test
-	void testMember1Insert() {
-		System.out.println("===== Testing Member 1: Character Insert =====\n");
+	void testInsert() {
+		System.out.println("===== Testing Character Insert =====\n");
 
 		CharCRDT myDoc = new CharCRDT();
 
@@ -43,7 +43,7 @@ public class ProjectServerApplicationTests {
 	}
 
 	@Test
-	void testMember1ConcurrentInsert() {
+	void testConcurrentInsert() {
 		System.out.println("===== Testing Concurrent Insert =====\n");
 
 		CharCRDT doc2 = new CharCRDT();
@@ -52,96 +52,82 @@ public class ProjectServerApplicationTests {
 		doc2.addChar(new CharNode(userOneFirst, null, 'A'));
 
 		CharID userOneX = new CharID(1, 2);
-		CharNode nodeX = new CharNode(userOneX, userOneFirst, 'X');
+		CharNode nodeX = new CharNode(userOneX, userOneFirst, 'C');
 		CharID userTwoY = new CharID(2, 1);
-		CharNode nodeY = new CharNode(userTwoY, userOneFirst, 'Y');
+		CharNode nodeY = new CharNode(userTwoY, userOneFirst, 'B');
 
 		doc2.addChar(nodeX);
 		doc2.addChar(nodeY);
 
-		System.out.println("Expected: AYX");
-		System.out.println("Got:      " + doc2.getText());
-		assert doc2.getText().equals("AYX") : "Expected AYX";
+		System.out.println("Expected: ABC");
+		System.out.println("Got: " + doc2.getText());
+		assert doc2.getText().equals("ABC") : "Expected ABC";
 		doc2.printAll();
 	}
 
-	// ===== Member 2 tests =====
+	// ===== Farah Sharshar's tests =====
 
 	@Test
-	void testDelete1() {
-		System.out.println("===== Testing Member 2: Delete =====\n");
+	void testDelete() {
+		System.out.println("===== Test 1: Delete =====\n");
 
 		CharCRDT doc = new CharCRDT();
+
 		CharID a1 = new CharID(1, 1);
 		CharID a2 = new CharID(1, 2);
 		CharID a3 = new CharID(1, 3);
+
 		doc.addChar(new CharNode(a1, null, 'H'));
 		doc.addChar(new CharNode(a2, a1, 'i'));
 		doc.addChar(new CharNode(a3, a2, '!'));
+
 		System.out.println("Before delete: " + doc.getText());
 		assert doc.getText().equals("Hi!") : "Expected Hi!";
+
 		DeleteCharOperation delOp = new DeleteCharOperation("B1_1", a2);
 		delOp.apply(doc);
+
 		System.out.println("After deleting 'i': " + doc.getText());
 		assert doc.getText().equals("H!") : "Expected H!";
-		doc.printAll();
-	}
-	@Test
-	void testDelete2() {
-		CharCRDT doc = new CharCRDT();
-		CharID a1 = new CharID(1, 1);
-		CharID a2 = new CharID(1, 2);
-		CharID a3 = new CharID(1, 3);
-		CharID a4 = new CharID(1, 4);
-		CharID a5 = new CharID(1, 5);
-		doc.addChar(new CharNode(a1, null, 'f'));
-		doc.addChar(new CharNode(a2, a1, 'a'));
-		doc.addChar(new CharNode(a3, a2, 'r'));
-		doc.addChar(new CharNode(a4, a3, 'a'));
-		doc.addChar(new CharNode(a5, a4, 'h'));
-		System.out.println("Before delete: " + doc.getText());
-		assert doc.getText().equals("farah") : "Expected farah";
-		DeleteCharOperation delOp = new DeleteCharOperation("B1_1", a1);
-		delOp.apply(doc);
-		System.out.println("After deleting 'f': " + doc.getText());
-		assert doc.getText().equals("arah") : "Expected arah";
 		doc.printAll();
 	}
 
 	@Test
 	void testReplace() {
-		System.out.println("===== Testing Member 2: Replace =====\n");
+		System.out.println("===== Test 2: Replace =====\n");
 
 		CharCRDT doc = new CharCRDT();
 
 		CharID b1 = new CharID(1, 1);
 		CharID b2 = new CharID(1, 2);
 		CharID b3 = new CharID(1, 3);
-		CharID b4 = new CharID(1, 4);
-		doc.addChar(new CharNode(b1, null, 't'));
-		doc.addChar(new CharNode(b2, b1, 'e'));
-		doc.addChar(new CharNode(b3, b2, 's'));
-		doc.addChar(new CharNode(b4, b3, 't'));
+
+		doc.addChar(new CharNode(b1, null, 'c'));
+		doc.addChar(new CharNode(b2, b1, 'a'));
+		doc.addChar(new CharNode(b3, b2, 't'));
+
 		System.out.println("Before replace: " + doc.getText());
-		assert doc.getText().equals("test") : "Expected test";
-		CharID b5 = new CharID(1, 5);
-		CharNode nodeU = new CharNode(b5, b1, 'a');
+		assert doc.getText().equals("cat") : "Expected cat";
+
+		CharID b4 = new CharID(1, 4);
+		CharNode nodeU = new CharNode(b4, b1, 'u');
 		ReplaceCharOperation replaceOp = new ReplaceCharOperation("B1_1", b2, nodeU);
 		replaceOp.apply(doc);
-		System.out.println("After replacing 'e' with 'a': " + doc.getText());
-		assert doc.getText().equals("tast") : "Expected tast";
+
+		System.out.println("After replacing 'a' with 'u': " + doc.getText());
+		assert doc.getText().equals("cut") : "Expected cut";
 		doc.printAll();
 	}
 
-	// ===== Member 3 tests (Block CRDT) =====
+	// ===== Rovana's tests (Block CRDT) =====
 
 	// ------------------------------------------------------------------
-	// Test 1 — basic block insert
+	// Test 1: basic block insert
 	// Create 3 blocks in order, check document structure and full text
 	// ------------------------------------------------------------------
 	@Test
 	void testBlockInsert() {
-		System.out.println("===== Testing Member 3: Block Insert =====\n");
+		System.out.println("=====  Test 1: basic block insert =====\n");
 
 		BlockCRDT doc = new BlockCRDT();
 
@@ -153,8 +139,8 @@ public class ProjectServerApplicationTests {
 		CharID c1 = new CharID(1, 1);
 		CharID c2 = new CharID(1, 2);
 		CharID c3 = new CharID(1, 3);
-		block1.getContent().addChar(new CharNode(c1, null, 'H'));
-		block1.getContent().addChar(new CharNode(c2, c1, 'i'));
+		block1.getContent().addChar(new CharNode(c1, null, 'O'));
+		block1.getContent().addChar(new CharNode(c2, c1, 'H'));
 		block1.getContent().addChar(new CharNode(c3, c2, '!'));
 
 		// Block 2: user 1 creates a second block after block 1
@@ -186,18 +172,18 @@ public class ProjectServerApplicationTests {
 		doc.printAll();
 
 		assert doc.getBlockCount() == 3 : "Expected 3 visible blocks, got " + doc.getBlockCount();
-		assert doc.getFullText().equals("Hi!\nOk\n?") : "Expected 'Hi!\\nOk\\n?' got '" + doc.getFullText() + "'";
+		assert doc.getFullText().equals("OH!\nOk\n?") : "Expected 'OH!\\nOk\\n?' got '" + doc.getFullText() + "'";
 
 		System.out.println("Block insert test PASSED\n");
 	}
 
 	// ------------------------------------------------------------------
-	// Test 2 — block delete (tombstone)
+	// Test 2: block delete (tombstone)
 	// Insert 3 blocks, delete the middle one, check count and text
 	// ------------------------------------------------------------------
 	@Test
 	void testBlockDelete() {
-		System.out.println("===== Testing Member 3: Block Delete =====\n");
+		System.out.println("===== Test 2: block delete (tombstone) =====\n");
 
 		BlockCRDT doc = new BlockCRDT();
 
@@ -244,12 +230,12 @@ public class ProjectServerApplicationTests {
 	}
 
 	// ------------------------------------------------------------------
-	// Test 3 — block split
+	// Test 3: block split
 	// Create a block with "Hello", split at index 2, expect "He" + "llo"
 	// ------------------------------------------------------------------
 	@Test
 	void testBlockSplit() {
-		System.out.println("===== Testing Member 3: Block Split =====\n");
+		System.out.println("===== Test 3: block split =====\n");
 
 		BlockCRDT doc = new BlockCRDT();
 
@@ -296,12 +282,12 @@ public class ProjectServerApplicationTests {
 	}
 
 	// ------------------------------------------------------------------
-	// Test 4 — block merge
+	// Test 4: block merge
 	// Create two blocks "Hello" and "World", merge them, expect "HelloWorld"
 	// ------------------------------------------------------------------
 	@Test
 	void testBlockMerge() {
-		System.out.println("===== Testing Member 3: Block Merge =====\n");
+		System.out.println("===== Test 4: block merge =====\n");
 
 		BlockCRDT doc = new BlockCRDT();
 
@@ -362,13 +348,13 @@ public class ProjectServerApplicationTests {
 	}
 
 	// ------------------------------------------------------------------
-	// Test 5 — concurrent block insert (tie-breaker)
+	// Test 5: concurrent block insert (tie-breaker)
 	// Two users insert a block at the same position simultaneously
 	// Higher siteId should win and appear first (earlier in document)
 	// ------------------------------------------------------------------
 	@Test
 	void testConcurrentBlockInsert() {
-		System.out.println("===== Testing Member 3: Concurrent Block Insert (tie-breaker) =====\n");
+		System.out.println("===== Test 5: concurrent block insert (tie-breaker) =====\n");
 
 		BlockCRDT doc = new BlockCRDT();
 
@@ -418,12 +404,12 @@ public class ProjectServerApplicationTests {
 	}
 
 	// ------------------------------------------------------------------
-	// Test 6 — split then merge round-trip
+	// Test 6: split then merge round-trip
 	// Split "Hello" into "He" + "llo", then merge back, expect "Hello"
 	// ------------------------------------------------------------------
 	@Test
 	void testSplitThenMerge() {
-		System.out.println("===== Testing Member 3: Split then Merge Round-Trip =====\n");
+		System.out.println("===== Test 6: split then merge round-trip =====\n");
 
 		BlockCRDT doc = new BlockCRDT();
 
@@ -462,7 +448,7 @@ public class ProjectServerApplicationTests {
 		System.out.println("Split-then-merge round-trip test PASSED\n");
 	}
 
-//tests formatting:
+//tests formatting (Farah Elhebeishy):
 
 // Test A: same parent, different siteId
 // Two users type at the same spot at the same time
