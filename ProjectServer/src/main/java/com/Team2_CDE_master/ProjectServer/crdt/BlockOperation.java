@@ -37,7 +37,6 @@ public class BlockOperation {
         return op;
     }
     private BlockOperation() {}
-
     public void apply(BlockCRDT blockCRDT) {
         switch (type) {
             case "insert_block":
@@ -56,9 +55,7 @@ public class BlockOperation {
                 System.out.println("BlockOperation.apply: unknown type — " + type);
         }
     }
-
     public String getType() { return type; }
-
     public String toString() {
         switch (type) {
             case "insert_block":  return "BlockOp[insert, block=" + blockToAdd.getMyId() + "]";
