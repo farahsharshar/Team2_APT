@@ -68,56 +68,71 @@ public class ProjectServerApplicationTests {
 	// ===== Farah Sharshar's tests =====
 
 	@Test
-	void testDelete() {
-		System.out.println("===== Test 1: Delete =====\n");
+	void testDelete1() {
+		System.out.println("===== Testing Member 2: Delete =====\n");
 
 		CharCRDT doc = new CharCRDT();
-
 		CharID a1 = new CharID(1, 1);
 		CharID a2 = new CharID(1, 2);
 		CharID a3 = new CharID(1, 3);
-
 		doc.addChar(new CharNode(a1, null, 'H'));
 		doc.addChar(new CharNode(a2, a1, 'i'));
 		doc.addChar(new CharNode(a3, a2, '!'));
-
 		System.out.println("Before delete: " + doc.getText());
 		assert doc.getText().equals("Hi!") : "Expected Hi!";
-
 		DeleteCharOperation delOp = new DeleteCharOperation("B1_1", a2);
 		delOp.apply(doc);
-
 		System.out.println("After deleting 'i': " + doc.getText());
 		assert doc.getText().equals("H!") : "Expected H!";
+		doc.printAll();
+	}
+	@Test
+	void testDelete2() {
+		CharCRDT doc = new CharCRDT();
+		CharID a1 = new CharID(1, 1);
+		CharID a2 = new CharID(1, 2);
+		CharID a3 = new CharID(1, 3);
+		CharID a4 = new CharID(1, 4);
+		CharID a5 = new CharID(1, 5);
+		doc.addChar(new CharNode(a1, null, 'f'));
+		doc.addChar(new CharNode(a2, a1, 'a'));
+		doc.addChar(new CharNode(a3, a2, 'r'));
+		doc.addChar(new CharNode(a4, a3, 'a'));
+		doc.addChar(new CharNode(a5, a4, 'h'));
+		System.out.println("Before delete: " + doc.getText());
+		assert doc.getText().equals("farah") : "Expected farah";
+		DeleteCharOperation delOp = new DeleteCharOperation("B1_1", a1);
+		delOp.apply(doc);
+		System.out.println("After deleting 'f': " + doc.getText());
+		assert doc.getText().equals("arah") : "Expected arah";
 		doc.printAll();
 	}
 
 	@Test
 	void testReplace() {
-		System.out.println("===== Test 2: Replace =====\n");
+		System.out.println("===== Testing Member 2: Replace =====\n");
 
 		CharCRDT doc = new CharCRDT();
 
 		CharID b1 = new CharID(1, 1);
 		CharID b2 = new CharID(1, 2);
 		CharID b3 = new CharID(1, 3);
-
-		doc.addChar(new CharNode(b1, null, 'c'));
-		doc.addChar(new CharNode(b2, b1, 'a'));
-		doc.addChar(new CharNode(b3, b2, 't'));
-
-		System.out.println("Before replace: " + doc.getText());
-		assert doc.getText().equals("cat") : "Expected cat";
-
 		CharID b4 = new CharID(1, 4);
-		CharNode nodeU = new CharNode(b4, b1, 'u');
+		doc.addChar(new CharNode(b1, null, 't'));
+		doc.addChar(new CharNode(b2, b1, 'e'));
+		doc.addChar(new CharNode(b3, b2, 's'));
+		doc.addChar(new CharNode(b4, b3, 't'));
+		System.out.println("Before replace: " + doc.getText());
+		assert doc.getText().equals("test") : "Expected test";
+		CharID b5 = new CharID(1, 5);
+		CharNode nodeU = new CharNode(b5, b1, 'a');
 		ReplaceCharOperation replaceOp = new ReplaceCharOperation("B1_1", b2, nodeU);
 		replaceOp.apply(doc);
-
-		System.out.println("After replacing 'a' with 'u': " + doc.getText());
-		assert doc.getText().equals("cut") : "Expected cut";
+		System.out.println("After replacing 'e' with 'a': " + doc.getText());
+		assert doc.getText().equals("tast") : "Expected tast";
 		doc.printAll();
 	}
+
 
 	// ===== Rovana's tests (Block CRDT) =====
 
