@@ -1,0 +1,168 @@
+package com.Team2_CDE_master.ProjectServer.handler;
+
+import com.Team2_CDE_master.ProjectServer.crdt.*;
+import com.Team2_CDE_master.ProjectServer.session.DocumentSession;
+import org.springframework.web.socket.*;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import org.json.*;
+
+public class CRDTWebSocketHandler extends TextWebSocketHandler {
+
+    // docId → set of connected sessions
+    private final Map<String, Set<WebSocketSession>> rooms = new ConcurrentHashMap<>();
+
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) {
+        String docId = extractDocId(session);
+        rooms.computeIfAbsent(docId, id -> Collections.synchronizedSet(new HashSet<>())).add(session);
+        System.out.println("Client connected to doc: " + docId);
+    }
+
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        String docId = extractDocId(session);
+        BlockCRDT doc = DocumentSession.getOrCreate(docId);
+
+        JSONObject json = new JSONObject(message.getPayload());
+        String type = json.getString("type");
+
+        // Apply the operation to the shared CRDT
+        synchronized (doc) {
+            applyOperation(doc, type, json);
+        }
+
+        // Broadcast to ALL clients in the same room (including sender for confirmation)
+        broadcast(docId, message.getPayload(), session);
+    }
+
+    @Override
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        String docId = extractDocId(session);
+        Set<WebSocketSession> room = rooms.get(docId);
+        if (room != null) room.remove(session);
+    }
+
+    // ---- Operation dispatcher ----
+    private void applyOperation(BlockCRDT doc, String type, JSONObject json) {
+        switch (type) {
+            case "insert_char" -> applyInsertChar(doc, json);
+            case "delete_char" -> applyDeleteChar(doc, json);
+            case "replace_char" -> applyReplaceChar(doc, json);
+            case "formatting"  -> applyFormatting(doc, json);
+            case "insert_block" -> applyInsertBlock(doc, json);
+            case "delete_block" -> applyDeleteBlock(doc, json);
+            case "split_block"  -> applySplitBlock(doc, json);
+            case "merge_blocks" -> applyMergeBlocks(doc, json);
+            default -> System.err.println("Unknown op type: " + type);
+        }
+    }
+
+    private void applyInsertChar(BlockCRDT doc, JSONObject json) {
+        String blockId = json.getString("blockId");
+        CharID charId = parseCharID(json.getJSONObject("charId"));
+        CharID parentId = json.isNull("parentId") ? null : parseCharID(json.getJSONObject("parentId"));
+        char ch = json.getString("char").charAt(0);
+
+        Block block = findOrWarnBlock(doc, blockId);
+        if (block == null) return;
+        CharNode node = new CharNode(charId, parentId, ch);
+        block.getContent().addChar(node);
+    }
+
+    private void applyDeleteChar(BlockCRDT doc, JSONObject json) {
+        String blockId = json.getString("blockId");
+        CharID targetId = parseCharID(json.getJSONObject("charId"));
+
+        Block block = findOrWarnBlock(doc, blockId);
+        if (block == null) return;
+        new DeleteCharOperation(blockId, targetId).apply(block.getContent());
+    }
+
+    private void applyReplaceChar(BlockCRDT doc, JSONObject json) {
+        String blockId = json.getString("blockId");
+        CharID oldId = parseCharID(json.getJSONObject("oldCharId"));
+        JSONObject newNodeJson = json.getJSONObject("newNode");
+        CharID newId = parseCharID(newNodeJson.getJSONObject("charId"));
+        CharID newParent = newNodeJson.isNull("parentId") ? null : parseCharID(newNodeJson.getJSONObject("parentId"));
+        char ch = newNodeJson.getString("char").charAt(0);
+
+        Block block = findOrWarnBlock(doc, blockId);
+        if (block == null) return;
+        CharNode newNode = new CharNode(newId, newParent, ch);
+        new ReplaceCharOperation(blockId, oldId, newNode).apply(block.getContent());
+    }
+
+    private void applyFormatting(BlockCRDT doc, JSONObject json) {
+        String blockId = json.getString("blockId");
+        CharID targetId = parseCharID(json.getJSONObject("charId"));
+        String formatType = json.getString("formatType");
+        boolean value = json.getBoolean("value");
+
+        Block block = findOrWarnBlock(doc, blockId);
+        if (block == null) return;
+        new FormattingOperation(targetId, formatType, value).apply(block.getContent());
+    }
+
+    private void applyInsertBlock(BlockCRDT doc, JSONObject json) {
+        BlockID blockId = parseBlockID(json.getJSONObject("blockId"));
+        BlockID parentId = json.isNull("parentBlockId") ? null : parseBlockID(json.getJSONObject("parentBlockId"));
+        Block newBlock = new Block(blockId, parentId);
+        doc.addBlock(newBlock);
+    }
+
+    private void applyDeleteBlock(BlockCRDT doc, JSONObject json) {
+        BlockID targetId = parseBlockID(json.getJSONObject("blockId"));
+        doc.deleteBlock(targetId);
+    }
+
+    private void applySplitBlock(BlockCRDT doc, JSONObject json) {
+        BlockID targetId = parseBlockID(json.getJSONObject("targetBlockId"));
+        int splitIndex = json.getInt("splitIndex");
+        BlockID newBlockId = parseBlockID(json.getJSONObject("newBlockId"));
+        doc.splitBlock(targetId, splitIndex, newBlockId);
+    }
+
+    private void applyMergeBlocks(BlockCRDT doc, JSONObject json) {
+        BlockID firstId = parseBlockID(json.getJSONObject("firstBlockId"));
+        BlockID secondId = parseBlockID(json.getJSONObject("secondBlockId"));
+        doc.mergeBlocks(firstId, secondId);
+    }
+
+    // ---- Helpers ----
+    private void broadcast(String docId, String payload, WebSocketSession sender) throws Exception {
+        Set<WebSocketSession> room = rooms.get(docId);
+        if (room == null) return;
+        for (WebSocketSession s : room) {
+            // send to everyone EXCEPT sender (sender already applied it locally)
+            if (s.isOpen() && !s.getId().equals(sender.getId())) {
+                s.sendMessage(new TextMessage(payload));
+            }
+        }
+    }
+
+    private CharID parseCharID(JSONObject json) {
+        return new CharID(json.getInt("siteId"), json.getInt("myNum"));
+    }
+
+    private BlockID parseBlockID(JSONObject json) {
+        return new BlockID(json.getInt("siteId"), json.getInt("counter"));
+    }
+
+    private Block findOrWarnBlock(BlockCRDT doc, String blockIdStr) {
+        // blockId format: "B{siteId}_{counter}"  e.g. "B1_2"
+        String[] parts = blockIdStr.replace("B", "").split("_");
+        BlockID id = new BlockID(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+        Block block = doc.findBlock(id);
+        if (block == null) System.err.println("Block not found: " + blockIdStr);
+        return block;
+    }
+
+    private String extractDocId(WebSocketSession session) {
+        // URI looks like /document/myDoc123
+        String path = session.getUri().getPath();
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
+}
