@@ -1,14 +1,23 @@
 package com.Team2_CDE_master.ProjectServer.crdt;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class BlockCRDT {
     public ArrayList<Block> allBlocks;
 
+    private final HashMap<String, Block> blockMap = new HashMap<>();
+
     public BlockCRDT() {
         allBlocks = new ArrayList<>();
     }
+
+    private String key(BlockID id) {
+        return id.siteId + "_" + id.counter;
+    }
+
     public void addBlock(Block newBlock) {
-        int parentPos = -1;   
+        int parentPos = -1;
         if (newBlock.getParentId() != null) {
             for (int i = 0; i < allBlocks.size(); i++) {
                 if (allBlocks.get(i).getMyId().isSameAs(newBlock.getParentId())) {
@@ -31,7 +40,7 @@ public class BlockCRDT {
                 if (current.getMyId().siteId > newBlock.getMyId().siteId) {
                     insertAt++;
                 } else {
-                    break;   
+                    break;
                 }
             } else {
                 break;
@@ -39,15 +48,17 @@ public class BlockCRDT {
         }
 
         allBlocks.add(insertAt, newBlock);
+        blockMap.put(key(newBlock.getMyId()), newBlock);
     }
+
     public void deleteBlock(BlockID targetId) {
         Block block = findBlock(targetId);
         if (block != null) {
             block.markDeleted();
         }
     }
-    public void splitBlock(BlockID targetId, int splitIndex, BlockID newBlockId) {
 
+    public void splitBlock(BlockID targetId, int splitIndex, BlockID newBlockId) {
         Block original = findBlock(targetId);
         if (original == null || original.checkDeleted()) {
             System.out.println("splitBlock: block not found or already deleted — " + targetId);
@@ -75,8 +86,8 @@ public class BlockCRDT {
         }
         addBlock(newBlock);
     }
-    public void mergeBlocks(BlockID firstId, BlockID secondId) {
 
+    public void mergeBlocks(BlockID firstId, BlockID secondId) {
         Block first = findBlock(firstId);
         Block second = findBlock(secondId);
 
@@ -113,14 +124,11 @@ public class BlockCRDT {
         }
         second.markDeleted();
     }
+
     public Block findBlock(BlockID targetId) {
-        for (Block block : allBlocks) {
-            if (block.getMyId().isSameAs(targetId)) {
-                return block;
-            }
-        }
-        return null;
+        return blockMap.get(key(targetId));
     }
+
     public String getFullText() {
         StringBuilder sb = new StringBuilder();
         boolean firstVisible = true;
@@ -133,6 +141,7 @@ public class BlockCRDT {
         }
         return sb.toString();
     }
+
     public int getBlockCount() {
         int count = 0;
         for (Block block : allBlocks) {
@@ -142,6 +151,7 @@ public class BlockCRDT {
         }
         return count;
     }
+
     public void printAll() {
         System.out.println("=== BlockCRDT (all blocks including deleted) ===");
         for (Block block : allBlocks) {

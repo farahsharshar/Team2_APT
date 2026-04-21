@@ -1,12 +1,22 @@
 package com.Team2_CDE_master.ProjectServer.crdt;
+
 import java.util.ArrayList;
+import java.util.HashMap;
+
 public class CharCRDT {
     // all the nodes — including deleted ones (tombstones)
     ArrayList<CharNode> allNodes;
 
+    private final HashMap<String, CharNode> nodeMap = new HashMap<>();
+
     public CharCRDT() {
         allNodes = new ArrayList<>();
     }
+
+    private String key(CharID id) {
+        return id.siteId + "," + id.myNum;
+    }
+
     // insert a new character node into the list
     // it goes right after its parent
     // if two chars have the same parent (concurrent insert), we use siteId to break the tie
@@ -49,7 +59,7 @@ public class CharCRDT {
 //            } else {
 //                break;   // no more siblings, stop here
 //            }
-           //deterministic ordering (Farah Elhebeishy)
+            //deterministic ordering (Farah Elhebeishy)
             if (sameParent) {
                 // higher siteId is supposed to be typed first
                 if (current.getMyId().siteId > newNode.getMyId().siteId) {
@@ -70,6 +80,7 @@ public class CharCRDT {
         }
 
         allNodes.add(insertAt, newNode);
+        nodeMap.put(key(newNode.getMyId()), newNode);
     }
 
     // get the visible text — skip deleted characters
@@ -85,13 +96,9 @@ public class CharCRDT {
 
     // find a node by its id (returns null if not found)
     public CharNode findNode(CharID targetId) {
-        for (CharNode node : allNodes) {
-            if (node.getMyId().isSameAs(targetId)) {
-                return node;
-            }
-        }
-        return null;
+        return nodeMap.get(key(targetId));
     }
+
     // applying bold or italic formatting to a node by its id
     // type = "bold" or "italic"
     // value = true to turn on, false to turn off
