@@ -1,8 +1,8 @@
 package com.Team2_CDE_master.ProjectServer.crdt;
 
 public class CharID {
-    int siteId; 
-    int myNum;  
+    public int siteId;
+    public int myNum;
 
     public CharID(int siteId, int myNum) {
         this.siteId = siteId;
