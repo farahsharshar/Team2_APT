@@ -102,7 +102,7 @@ public class EditorWindow extends JFrame {
 
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         bottomPanel.setBorder(BorderFactory.createEtchedBorder());
-        bottomPanel.add(new JLabel("Team 2 — Collaborative Plain Text Editor  |  Phase 2"));
+        bottomPanel.add(new JLabel("Team 2 — Collaborative Plain Text Editor"));
 
         setLayout(new BorderLayout(5, 5));
         add(northPanel, BorderLayout.NORTH);
@@ -124,9 +124,8 @@ public class EditorWindow extends JFrame {
             public void keyTyped(KeyEvent e) {
                 if (isUpdating || !NetworkManager.getInstance().isConnected()) return;
                 char ch = e.getKeyChar();
-                // only handle printable ASCII — skip control characters
                 if (ch >= 32 && ch < 127) {
-                    e.consume();  // prevent default insertion into text pane
+                    e.consume();
                     handleInsertChar(ch);
                 }
             }

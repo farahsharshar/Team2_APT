@@ -34,9 +34,9 @@ public class NetworkManager {
         try {
             wsClient = new CRDTWebSocketClient(serverUrl, docId, listener);
             wsClient.connect();
-            System.out.println("[NetworkManager] Connecting to " + serverUrl + " as site " + siteId);
+            System.out.println(" Connecting to " + serverUrl + " as site " + siteId);
         } catch (URISyntaxException e) {
-            System.err.println("[NetworkManager] Bad server URL: " + e.getMessage());
+            System.err.println(" Bad server URL: " + e.getMessage());
             if (listener != null) listener.onError("Bad server URL: " + e.getMessage());
         }
     }
@@ -70,47 +70,47 @@ public class NetworkManager {
 
 
     public void sendInsertChar(String blockId, CharID charId, CharID parentId, char ch) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.insertChar(blockId, charId, parentId, ch));
     }
 
     public void sendDeleteChar(String blockId, CharID charId) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.deleteChar(blockId, charId));
     }
 
     public void sendReplaceChar(String blockId, CharID oldCharId, CharNode newNode) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.replaceChar(blockId, oldCharId, newNode));
     }
 
     public void sendFormatting(String blockId, CharID charId, String formatType, boolean value) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.formatting(blockId, charId, formatType, value));
     }
 
     public void sendInsertBlock(BlockID blockId, BlockID parentBlockId) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.insertBlock(blockId, parentBlockId));
     }
 
     public void sendDeleteBlock(BlockID blockId) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.deleteBlock(blockId));
     }
 
     public void sendSplitBlock(BlockID targetBlockId, int splitIndex, BlockID newBlockId) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.splitBlock(targetBlockId, splitIndex, newBlockId));
     }
 
     public void sendMergeBlocks(BlockID firstBlockId, BlockID secondBlockId) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.mergeBlocks(firstBlockId, secondBlockId));
     }
 
     public void sendRawMessage(String json) {
-        if (!isConnected()) { System.err.println("[NetworkManager] Not connected"); return; }
+        if (!isConnected()) { System.err.println(" Not connected"); return; }
         wsClient.sendOperation(json);
     }
     public void sendCursorUpdate(int siteId, int caretPosition) {

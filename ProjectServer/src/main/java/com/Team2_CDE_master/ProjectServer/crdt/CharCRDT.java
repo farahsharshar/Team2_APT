@@ -33,9 +33,8 @@ public class CharCRDT {
                 }
             }
         }
-        // now figure out where exactly to insert
+        // figure out where exactly to insert
         // we start right after the parent and skip any siblings that have a higher siteId
-        // (higher siteId wins → goes first — Member 4 will refine this logic)
         int insertAt = parentPos + 1;
 
         while (insertAt < allNodes.size()) {
@@ -130,7 +129,6 @@ public class CharCRDT {
             System.out.println("  " + node.toString());
         }
         System.out.println("Visible text: \"" + getText() + "\"");
-        System.out.println("=====================================");
     }
 
     // how many visible (not deleted) characters are there

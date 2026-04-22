@@ -44,7 +44,6 @@
 			<version>20240303</version>
 		</dependency>
 
-		<!-- WebSocket client library — needed for CRDTWebSocketClient -->
 		<dependency>
 			<groupId>org.java-websocket</groupId>
 			<artifactId>Java-WebSocket</artifactId>

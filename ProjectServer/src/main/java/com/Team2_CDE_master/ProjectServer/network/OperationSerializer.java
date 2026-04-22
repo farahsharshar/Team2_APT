@@ -3,7 +3,6 @@ package com.Team2_CDE_master.ProjectServer.network;
 import com.Team2_CDE_master.ProjectServer.crdt.*;
 import org.json.JSONObject;
 
-// takes operation parameters and give back working jason ready
 
 public class OperationSerializer {
     public static String insertChar(String blockId, CharID charId, CharID parentId, char ch) {

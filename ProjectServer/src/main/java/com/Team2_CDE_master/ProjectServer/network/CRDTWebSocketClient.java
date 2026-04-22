@@ -11,9 +11,9 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     private final OperationListener listener;
 
-    // "ws://localhost:8080"
+    // "ws://localhost:8081"
     // "myDoc123"
-    // ws://localhost:8080/document/myDoc123
+    // ws://localhost:8081/document/myDoc123
     public CRDTWebSocketClient(String serverUrl, String docId, OperationListener listener)
             throws URISyntaxException {
         super(new URI(serverUrl + "/document/" + docId));
@@ -22,7 +22,7 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     @Override
     public void onOpen(ServerHandshake handshake) {
-        System.out.println("[WebSocket] Connected to server");
+        System.out.print(" Connected to server");
         if (listener != null) {
             listener.onConnected();
         }
@@ -30,7 +30,7 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     @Override
     public void onMessage(String message) {
-        System.out.println("[WebSocket] Received: " + message);
+        System.out.println(" Received: " + message);
         if (listener != null) {
             listener.onOperationReceived(message);
         }
@@ -38,8 +38,8 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        System.out.println("[WebSocket] Disconnected. Reason: " + reason +
-                " | Remote: " + remote + " | Code: " + code);
+        System.out.println(" Disconnected. Reason: " + reason +
+                " , Remote: " + remote + " , Code: " + code);
         if (listener != null) {
             listener.onDisconnected();
         }
@@ -47,7 +47,7 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     @Override
     public void onError(Exception ex) {
-        System.err.println("[WebSocket] Error: " + ex.getMessage());
+        System.err.println(" Error: " + ex.getMessage());
         if (listener != null) {
             listener.onError(ex.getMessage());
         }
@@ -56,9 +56,9 @@ public class CRDTWebSocketClient extends WebSocketClient {
     public void sendOperation(String jsonPayload) {
         if (isOpen()) {
             send(jsonPayload);
-            System.out.println("[WebSocket] Sent: " + jsonPayload);
+            System.out.println(" Sent: " + jsonPayload);
         } else {
-            System.err.println("[WebSocket] Cannot send — not connected yet");
+            System.err.println(" Cannot send : not connected yet");
         }
     }
 }
