@@ -11,7 +11,6 @@ import org.json.*;
 
 public class CRDTWebSocketHandler extends TextWebSocketHandler {
 
-    // docId → set of connected sessions
     private final Map<String, Set<WebSocketSession>> rooms = new ConcurrentHashMap<>();
 
     @Override
@@ -24,17 +23,21 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String docId = extractDocId(session);
-        BlockCRDT doc = DocumentSession.getOrCreate(docId);
 
         JSONObject json = new JSONObject(message.getPayload());
         String type = json.getString("type");
 
-        // Apply the operation to the shared CRDT
+        if (type.equals("cursor_update")) {
+            broadcast(docId, message.getPayload(), session);
+            return;
+        }
+
+        BlockCRDT doc = DocumentSession.getOrCreate(docId);
+
         synchronized (doc) {
             applyOperation(doc, type, json);
         }
 
-        // Broadcast to ALL clients in the same room (including sender for confirmation)
         broadcast(docId, message.getPayload(), session);
     }
 
@@ -43,15 +46,15 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         String docId = extractDocId(session);
         Set<WebSocketSession> room = rooms.get(docId);
         if (room != null) room.remove(session);
+        System.out.println("Client disconnected from doc: " + docId);
     }
 
-    // ---- Operation dispatcher ----
     private void applyOperation(BlockCRDT doc, String type, JSONObject json) {
         switch (type) {
-            case "insert_char" -> applyInsertChar(doc, json);
-            case "delete_char" -> applyDeleteChar(doc, json);
+            case "insert_char"  -> applyInsertChar(doc, json);
+            case "delete_char"  -> applyDeleteChar(doc, json);
             case "replace_char" -> applyReplaceChar(doc, json);
-            case "formatting"  -> applyFormatting(doc, json);
+            case "formatting"   -> applyFormatting(doc, json);
             case "insert_block" -> applyInsertBlock(doc, json);
             case "delete_block" -> applyDeleteBlock(doc, json);
             case "split_block"  -> applySplitBlock(doc, json);
@@ -131,12 +134,10 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         doc.mergeBlocks(firstId, secondId);
     }
 
-    // ---- Helpers ----
     private void broadcast(String docId, String payload, WebSocketSession sender) throws Exception {
         Set<WebSocketSession> room = rooms.get(docId);
         if (room == null) return;
         for (WebSocketSession s : room) {
-            // send to everyone EXCEPT sender (sender already applied it locally)
             if (s.isOpen() && !s.getId().equals(sender.getId())) {
                 s.sendMessage(new TextMessage(payload));
             }
@@ -152,7 +153,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
     }
 
     private Block findOrWarnBlock(BlockCRDT doc, String blockIdStr) {
-        // blockId format: "B{siteId}_{counter}"  e.g. "B1_2"
         String[] parts = blockIdStr.replace("B", "").split("_");
         BlockID id = new BlockID(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
         Block block = doc.findBlock(id);
@@ -161,7 +161,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
     }
 
     private String extractDocId(WebSocketSession session) {
-        // URI looks like /document/myDoc123
         String path = session.getUri().getPath();
         return path.substring(path.lastIndexOf('/') + 1);
     }
