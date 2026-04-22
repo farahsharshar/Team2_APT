@@ -5,7 +5,7 @@ import java.util.HashMap;
 
 public class CharCRDT {
     // all the nodes — including deleted ones (tombstones)
-    ArrayList<CharNode> allNodes;
+    public ArrayList<CharNode> allNodes;
 
     private final HashMap<String, CharNode> nodeMap = new HashMap<>();
 
