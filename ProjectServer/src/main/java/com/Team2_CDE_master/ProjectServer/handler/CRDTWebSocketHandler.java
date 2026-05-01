@@ -1,7 +1,11 @@
 package com.Team2_CDE_master.ProjectServer.handler;
 
 import com.Team2_CDE_master.ProjectServer.crdt.*;
+import com.Team2_CDE_master.ProjectServer.persistence.DocumentPersistenceService;
 import com.Team2_CDE_master.ProjectServer.session.DocumentSession;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
@@ -9,7 +13,14 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import org.json.*;
 
+// @Component makes Spring manage this bean so @Autowired and @Scheduled work.
+// WebSocketConfig now autowires this instead of calling "new CRDTWebSocketHandler()".
+@Component
 public class CRDTWebSocketHandler extends TextWebSocketHandler {
+
+    // Spring injects the persistence service — handles saving/loading to H2
+    @Autowired
+    private DocumentPersistenceService persistenceService;
 
     private final Map<String, Set<WebSocketSession>> rooms = new ConcurrentHashMap<>();
 
@@ -17,6 +28,17 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) {
         String docId = extractDocId(session);
         rooms.computeIfAbsent(docId, id -> Collections.synchronizedSet(new HashSet<>())).add(session);
+
+        // When the first client connects to a document, check the database.
+        // If this document was saved before, restore it so the client sees the old content.
+        if (DocumentSession.get(docId) == null) {
+            BlockCRDT saved = persistenceService.loadDocument(docId);
+            if (saved != null) {
+                DocumentSession.seed(docId, saved);
+                System.out.println("Auto-loaded '" + docId + "' from database");
+            }
+        }
+
         System.out.println("Client connected to doc: " + docId);
     }
 
@@ -163,5 +185,26 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
     private String extractDocId(WebSocketSession session) {
         String path = session.getUri().getPath();
         return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    // Auto-save all active documents every 30 seconds.
+    // fixedDelay means: wait 30 s after the previous run finishes before running again.
+    @Scheduled(fixedDelay = 30000)
+    public void autoSaveAll() {
+        Map<String, BlockCRDT> sessions = DocumentSession.getAllSessions();
+        if (sessions.isEmpty()) return;
+
+        System.out.println("[AutoSave] Saving " + sessions.size() + " active document(s)...");
+        for (Map.Entry<String, BlockCRDT> entry : sessions.entrySet()) {
+            String docId = entry.getKey();
+            BlockCRDT doc = entry.getValue();
+            try {
+                synchronized (doc) {
+                    persistenceService.saveDocument(doc, docId, docId);
+                }
+            } catch (Exception e) {
+                System.err.println("[AutoSave] Failed to save '" + docId + "': " + e.getMessage());
+            }
+        }
     }
 }
