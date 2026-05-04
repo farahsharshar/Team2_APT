@@ -18,7 +18,7 @@ public class ShareManager {
      *
      * @param parent     parent component for the dialog
      * @param docId      document ID
-     * @param serverBase HTTP base URL, e.g. "http://localhost:8080"
+     * @param serverBase HTTP base URL, e.g. "http://<host>:8081"
      */
     public static void showShareDialog(Component parent, String docId, String serverBase) {
         if (docId == null || docId.isBlank()) {

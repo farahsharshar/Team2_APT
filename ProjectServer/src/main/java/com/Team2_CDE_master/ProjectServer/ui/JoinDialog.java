@@ -10,10 +10,9 @@ import java.nio.charset.StandardCharsets;
 
 public class JoinDialog {
 
-    private static final String SERVER_BASE = "http://localhost:8081";
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
-    public static JoinResult show(Component parent) {
+    public static JoinResult show(Component parent, String serverBase) {
 
         JPanel panel = new JPanel(new BorderLayout(8, 8));
         panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 4, 8));
@@ -49,7 +48,7 @@ public class JoinDialog {
             }
 
             try {
-                String url = SERVER_BASE + "/api/share/join?code="
+                String url = serverBase + "/api/share/join?code="
                         + java.net.URLEncoder.encode(code, StandardCharsets.UTF_8);
 
                 HttpRequest req = HttpRequest.newBuilder()

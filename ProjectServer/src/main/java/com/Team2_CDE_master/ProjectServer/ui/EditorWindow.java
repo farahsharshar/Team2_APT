@@ -14,11 +14,8 @@ import java.util.*;
 
 public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListener {
 
-    // ── Single server address used by both HTTP and WebSocket ──────────────
-    private static final String SERVER_HOST = "localhost";
+    private static final String DEFAULT_SERVER_HOST = "localhost";
     private static final int    SERVER_PORT = 8081;
-    private static final String HTTP_BASE   = "http://" + SERVER_HOST + ":" + SERVER_PORT;
-    private static final String WS_BASE     = "ws://"   + SERVER_HOST + ":" + SERVER_PORT;
 
     private BlockCRDT localDoc = new BlockCRDT();
     private int siteId = 1;
@@ -29,6 +26,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     private JLabel statusLabel;
     private JTextField docIdField;
     private JTextField siteIdField;
+    private JTextField serverHostField;
     private JButton connectBtn;
     private JButton boldBtn;
     private JButton italicBtn;
@@ -77,18 +75,21 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         menuBar.add(new JMenu("View"));
         setJMenuBar(menuBar);
 
-        fileToolbar = new FileToolbar(this, siteId);
+        fileToolbar = new FileToolbar(this, siteId, this::getHttpBase);
         fileToolbar.setToolbarListener(this);
 
         JPanel connectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         docIdField  = new JTextField("myDoc", 10);
         siteIdField = new JTextField("1", 3);
+        serverHostField = new JTextField(DEFAULT_SERVER_HOST, 12);
         connectBtn  = new JButton("Connect");
 
         connectPanel.add(new JLabel("Doc:"));
         connectPanel.add(docIdField);
         connectPanel.add(new JLabel("Site:"));
         connectPanel.add(siteIdField);
+        connectPanel.add(new JLabel("Server IP:"));
+        connectPanel.add(serverHostField);
         connectPanel.add(connectBtn);
 
         JButton joinBtn = new JButton("Join by Code");
@@ -128,8 +129,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         shareBtn.addActionListener(e -> {
             if (ViewerMode.isViewer()) return;
             if (currentDocId != null) {
-                // Pass the HTTP base so ShareManager uses the correct server address
-                ShareManager.showShareDialog(this, currentDocId, HTTP_BASE);
+                ShareManager.showShareDialog(this, currentDocId, getHttpBase());
             }
         });
 
@@ -215,6 +215,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             docIdField.setText(docId);
             docIdField.setEnabled(true);
             siteIdField.setEnabled(true);
+            serverHostField.setEnabled(true);
             connectBtn.setEnabled(true);
 
             textPane.setEnabled(false);
@@ -262,6 +263,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             docIdField.setText("myDoc");
             docIdField.setEnabled(true);
             siteIdField.setEnabled(true);
+            serverHostField.setEnabled(true);
             connectBtn.setEnabled(true);
 
             textPane.setEnabled(false);
@@ -304,7 +306,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     }
 
     private void handleJoinByCode() {
-        JoinDialog.JoinResult result = JoinDialog.show(this);
+        JoinDialog.JoinResult result = JoinDialog.show(this, getHttpBase());
         if (result == null) return;
 
         ViewerMode.setRole(result.role());
@@ -435,6 +437,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             connectBtn.setEnabled(false);
             docIdField.setEnabled(false);
             siteIdField.setEnabled(false);
+            serverHostField.setEnabled(false);
             textPane.requestFocus();
         }));
 
@@ -454,11 +457,30 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }));
 
         String role = ViewerMode.isViewer() ? "VIEWER" : "EDITOR";
-        // ── Use WS_BASE (port 8080) instead of hardcoded 8081 ─────────────
-        NetworkManager.getInstance().connect(WS_BASE, docId, siteId, applier, role);
+        NetworkManager.getInstance().connect(getWsBase(), docId, siteId, applier, role);
 
         statusLabel.setText("Connecting...");
         statusLabel.setForeground(Color.ORANGE);
+    }
+
+    private String getServerHost() {
+        if (serverHostField == null) return DEFAULT_SERVER_HOST;
+        String host = serverHostField.getText().trim();
+        if (host.isEmpty()) return DEFAULT_SERVER_HOST;
+
+        host = host.replaceFirst("(?i)^(https?://|wss?://)", "");
+        int slash = host.indexOf('/');
+        if (slash >= 0) host = host.substring(0, slash);
+        if (host.endsWith(":" + SERVER_PORT)) host = host.substring(0, host.length() - (":" + SERVER_PORT).length());
+        return host.isBlank() ? DEFAULT_SERVER_HOST : host;
+    }
+
+    private String getHttpBase() {
+        return "http://" + getServerHost() + ":" + SERVER_PORT;
+    }
+
+    private String getWsBase() {
+        return "ws://" + getServerHost() + ":" + SERVER_PORT;
     }
 
     // ELHEBEISHY'S PART

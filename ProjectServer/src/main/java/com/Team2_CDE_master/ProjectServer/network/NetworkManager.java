@@ -28,13 +28,13 @@ public class NetworkManager {
     }
 
     /**
-     * @param serverUrl  e.g. "ws://localhost:8080"  (no trailing slash, no path)
+     * @param serverUrl  e.g. "ws://<host>:8081"  (no trailing slash, no path)
      * @param docId      document id
      * @param siteId     this client's site id
      * @param listener   operation listener
      * @param role       "EDITOR" or "VIEWER"
      *
-     * Final WebSocket URI: ws://localhost:8080/document/<docId>?role=<role>
+     * Final WebSocket URI: ws://<host>:8081/document/<docId>?role=<role>
      */
     public void connect(String serverUrl, String docId, int siteId,
                         OperationListener listener, String role) {

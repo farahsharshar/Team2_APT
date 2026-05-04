@@ -4,6 +4,7 @@ import com.Team2_CDE_master.ProjectServer.crdt.BlockCRDT;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.function.Supplier;
 
 public class FileToolbar extends JPanel {
 
@@ -19,8 +20,8 @@ public class FileToolbar extends JPanel {
     private final FileManager fileManager;
     private FileToolbarListener toolbarListener;
 
-    public FileToolbar(Component parentComponent, int siteId) {
-        fileManager = new FileManager(parentComponent);
+    public FileToolbar(Component parentComponent, int siteId, Supplier<String> serverBaseSupplier) {
+        fileManager = new FileManager(parentComponent, serverBaseSupplier);
         fileManager.setSiteId(siteId);
 
         fileManager.setFileActionListener(new FileManager.FileActionListener() {

@@ -39,6 +39,8 @@ public class OperationApplier implements OperationListener {
     public void setOnCursorUpdate(BiConsumer<Integer, Integer> c) { this.onCursorUpdate = c; }
     public void setOnPresenceJoin(BiConsumer<Integer, String> c) { this.onPresenceJoin = c; }
     public void setOnPresenceLeave(Consumer<Integer> c) { this.onPresenceLeave = c; }
+
+
     // ELHEBEISHY'S PART
     public void setOnFullSyncApplied(Runnable r) { this.onFullSyncApplied = r; }
     // ELHEBEISHY'S PART

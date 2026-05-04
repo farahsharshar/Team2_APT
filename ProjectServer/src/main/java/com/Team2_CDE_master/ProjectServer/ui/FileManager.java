@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.util.function.Supplier;
 
 public class FileManager {
 
@@ -21,14 +22,15 @@ public class FileManager {
     }
 
     private final Component parentComponent;
+    private final Supplier<String> serverBaseSupplier;
     private FileActionListener actionListener;
     private int siteId;
 
-    private static final String SERVER_BASE = "http://localhost:8081";
     private final HttpClient http = HttpClient.newHttpClient();
 
-    public FileManager(Component parentComponent) {
+    public FileManager(Component parentComponent, Supplier<String> serverBaseSupplier) {
         this.parentComponent = parentComponent;
+        this.serverBaseSupplier = serverBaseSupplier;
     }
     public void setSiteId(int siteId) {
         this.siteId = siteId;
@@ -164,7 +166,7 @@ public class FileManager {
         }
         newName = newName.trim();
         try {
-            String url = SERVER_BASE + "/api/documents?docId="
+            String url = getServerBase() + "/api/documents?docId="
                     + java.net.URLEncoder.encode(newName, StandardCharsets.UTF_8)
                     + "&name="
                     + java.net.URLEncoder.encode(newName, StandardCharsets.UTF_8);
@@ -203,7 +205,7 @@ public class FileManager {
             return false;
         }
         try {
-            String url = SERVER_BASE + "/api/documents/"
+            String url = getServerBase() + "/api/documents/"
                     + java.net.URLEncoder.encode(docId, StandardCharsets.UTF_8);
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -258,10 +260,16 @@ public class FileManager {
         if (actionListener != null) actionListener.onStatusMessage(msg);
         else System.out.println("[FileManager] " + msg);
     }
+
+    private String getServerBase() {
+        return serverBaseSupplier.get();
+    }
+
     public void openDocument() {
+        String serverBase = getServerBase();
         new Thread(() -> {
             try {
-                String url = SERVER_BASE + "/api/documents";
+                String url = serverBase + "/api/documents";
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(url))
                         .GET()
@@ -380,9 +388,10 @@ public class FileManager {
 
     private void loadDocumentFromServer(String docId) {
         notify("Loading '" + docId + "' from server...");
+        String serverBase = getServerBase();
         new Thread(() -> {
             try {
-                String url = SERVER_BASE + "/api/documents/"
+                String url = serverBase + "/api/documents/"
                         + java.net.URLEncoder.encode(docId, java.nio.charset.StandardCharsets.UTF_8);
 
                 HttpRequest request = HttpRequest.newBuilder()
