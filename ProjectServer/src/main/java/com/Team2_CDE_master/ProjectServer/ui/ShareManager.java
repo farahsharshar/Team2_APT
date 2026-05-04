@@ -11,10 +11,16 @@ import java.nio.charset.StandardCharsets;
 
 public class ShareManager {
 
-    private static final String SERVER_BASE = "http://localhost:8080";
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
-    public static void showShareDialog(Component parent, String docId) {
+    /**
+     * Shows the share-codes dialog for the given document.
+     *
+     * @param parent     parent component for the dialog
+     * @param docId      document ID
+     * @param serverBase HTTP base URL, e.g. "http://localhost:8080"
+     */
+    public static void showShareDialog(Component parent, String docId, String serverBase) {
         if (docId == null || docId.isBlank()) {
             JOptionPane.showMessageDialog(parent,
                     "No document is open.", "Share", JOptionPane.WARNING_MESSAGE);
@@ -23,7 +29,7 @@ public class ShareManager {
 
         new Thread(() -> {
             try {
-                String url = SERVER_BASE + "/api/share/"
+                String url = serverBase + "/api/share/"
                         + java.net.URLEncoder.encode(docId, StandardCharsets.UTF_8);
 
                 HttpRequest req = HttpRequest.newBuilder()
@@ -43,7 +49,7 @@ public class ShareManager {
                     SwingUtilities.invokeLater(() ->
                             JOptionPane.showMessageDialog(parent,
                                     "Document not found on server.\n"
-                                    + "Make sure the document is connected before sharing.",
+                                            + "Make sure the document is connected before sharing.",
                                     "Share Failed", JOptionPane.ERROR_MESSAGE));
                 } else {
                     SwingUtilities.invokeLater(() ->
@@ -123,8 +129,8 @@ public class ShareManager {
         btn.setFont(new Font("Arial", Font.PLAIN, 12));
         btn.addActionListener(e -> {
             Toolkit.getDefaultToolkit()
-                   .getSystemClipboard()
-                   .setContents(new StringSelection(code), null);
+                    .getSystemClipboard()
+                    .setContents(new StringSelection(code), null);
             btn.setText("Copied!");
             new Timer(1500, t -> { btn.setText("Copy"); ((Timer)t.getSource()).stop(); })
                     .start();

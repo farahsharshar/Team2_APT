@@ -10,9 +10,7 @@ public class NetworkManager {
     private static NetworkManager instance;
 
     private CRDTWebSocketClient wsClient;
-
     private OperationListener listener;
-
     private int siteId;
 
     private final AtomicInteger charCounter  = new AtomicInteger(0);
@@ -29,18 +27,28 @@ public class NetworkManager {
         return instance;
     }
 
+    /**
+     * @param serverUrl  e.g. "ws://localhost:8080"  (no trailing slash, no path)
+     * @param docId      document id
+     * @param siteId     this client's site id
+     * @param listener   operation listener
+     * @param role       "EDITOR" or "VIEWER"
+     *
+     * Final WebSocket URI: ws://localhost:8080/document/<docId>?role=<role>
+     */
     public void connect(String serverUrl, String docId, int siteId,
                         OperationListener listener, String role) {
-        this.siteId    = siteId;
-        this.listener  = listener;
+        this.siteId   = siteId;
+        this.listener = listener;
 
         String safeRole = (role != null && role.equalsIgnoreCase("EDITOR")) ? "EDITOR" : "VIEWER";
-        String fullUrl  = serverUrl + "?role=" + safeRole;
 
         try {
-            wsClient = new CRDTWebSocketClient(fullUrl, docId, listener);
+            wsClient = new CRDTWebSocketClient(serverUrl, docId, safeRole, listener);
             wsClient.connect();
-            System.out.println("Connecting to " + serverUrl + " as site " + siteId + " [" + safeRole + "]");
+            System.out.println("Connecting to " + serverUrl
+                    + "/document/" + docId + "?role=" + safeRole
+                    + "  (site " + siteId + ")");
         } catch (URISyntaxException e) {
             System.err.println("Bad server URL: " + e.getMessage());
             if (listener != null) listener.onError("Bad server URL: " + e.getMessage());
@@ -70,13 +78,9 @@ public class NetworkManager {
         return "B" + id.siteId + "_" + id.counter;
     }
 
-    public int getSiteId() {
-        return siteId;
-    }
+    public int getSiteId() { return siteId; }
 
-    public ReconnectionHandler getReconnectionHandler() {
-        return reconnHandler;
-    }
+    public ReconnectionHandler getReconnectionHandler() { return reconnHandler; }
 
     public void sendInsertChar(String blockId, CharID charId, CharID parentId, char ch) {
         if (!isConnected()) { System.err.println("Not connected"); return; }

@@ -24,7 +24,7 @@ public class FileManager {
     private FileActionListener actionListener;
     private int siteId;
 
-    private static final String SERVER_BASE = "http://localhost:8080";
+    private static final String SERVER_BASE = "http://localhost:8081";
     private final HttpClient http = HttpClient.newHttpClient();
 
     public FileManager(Component parentComponent) {

@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 
 public class JoinDialog {
 
-    private static final String SERVER_BASE = "http://localhost:8080";
+    private static final String SERVER_BASE = "http://localhost:8081";
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
     public static JoinResult show(Component parent) {

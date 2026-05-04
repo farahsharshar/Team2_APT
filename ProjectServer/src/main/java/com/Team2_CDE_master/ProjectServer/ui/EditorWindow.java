@@ -14,6 +14,12 @@ import java.util.*;
 
 public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListener {
 
+    // ── Single server address used by both HTTP and WebSocket ──────────────
+    private static final String SERVER_HOST = "localhost";
+    private static final int    SERVER_PORT = 8081;
+    private static final String HTTP_BASE   = "http://" + SERVER_HOST + ":" + SERVER_PORT;
+    private static final String WS_BASE     = "ws://"   + SERVER_HOST + ":" + SERVER_PORT;
+
     private BlockCRDT localDoc = new BlockCRDT();
     private int siteId = 1;
     private BlockID currentBlockId;
@@ -101,7 +107,8 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         shareBtn.addActionListener(e -> {
             if (ViewerMode.isViewer()) return;
             if (currentDocId != null) {
-                ShareManager.showShareDialog(this, currentDocId);
+                // Pass the HTTP base so ShareManager uses the correct server address
+                ShareManager.showShareDialog(this, currentDocId, HTTP_BASE);
             }
         });
 
@@ -186,6 +193,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             textPane.setEnabled(false);
             boldBtn.setEnabled(false);
             italicBtn.setEnabled(false);
+            shareBtn.setEnabled(false);
 
             statusLabel.setText("Document '" + docId + "' ready — click Connect");
             statusLabel.setForeground(new Color(0, 100, 200));
@@ -228,6 +236,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             textPane.setEnabled(false);
             boldBtn.setEnabled(false);
             italicBtn.setEnabled(false);
+            shareBtn.setEnabled(false);
 
             statusLabel.setText("Document deleted — create or connect to a new one");
             statusLabel.setForeground(Color.GRAY);
@@ -280,8 +289,9 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         boldBtn.setEnabled(!viewer);
         italicBtn.setEnabled(!viewer);
 
+        // Share button: visible and enabled only for editors, but only once connected
         shareBtn.setVisible(!viewer);
-        shareBtn.setEnabled(!viewer);
+        shareBtn.setEnabled(!viewer && NetworkManager.getInstance().isConnected());
 
         viewerBtn.setSelected(viewer);
         viewerBtn.setText(ViewerMode.label());
@@ -344,6 +354,12 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             statusLabel.setText("Connected — " + docId + "  (site " + siteId + ")" + roleLabel);
             statusLabel.setForeground(new Color(0, 130, 0));
 
+            // ── Enable share button here, after confirmed connection ──────
+            if (!ViewerMode.isViewer()) {
+                shareBtn.setVisible(true);
+                shareBtn.setEnabled(true);
+            }
+
             applyRoleToUI();
 
             viewerBtn.setEnabled(false);
@@ -366,7 +382,8 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }));
 
         String role = ViewerMode.isViewer() ? "VIEWER" : "EDITOR";
-        NetworkManager.getInstance().connect("ws://localhost:8081", docId, siteId, applier, role);
+        // ── Use WS_BASE (port 8080) instead of hardcoded 8081 ─────────────
+        NetworkManager.getInstance().connect(WS_BASE, docId, siteId, applier, role);
 
         statusLabel.setText("Connecting...");
         statusLabel.setForeground(Color.ORANGE);
@@ -447,7 +464,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         if (!NetworkManager.getInstance().isConnected()) return;
         try {
             String txt = (String) java.awt.Toolkit.getDefaultToolkit()
-                .getSystemClipboard().getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+                    .getSystemClipboard().getData(java.awt.datatransfer.DataFlavor.stringFlavor);
             if (txt == null || txt.isEmpty()) return;
             for (int i = 0; i < txt.length(); i++) {
                 char c = txt.charAt(i);

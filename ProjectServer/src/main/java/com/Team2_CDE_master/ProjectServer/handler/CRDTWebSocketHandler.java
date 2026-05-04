@@ -20,28 +20,31 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
     private DocumentPersistenceService persistenceService;
 
     private final Map<String, Set<WebSocketSession>> rooms = new ConcurrentHashMap<>();
-
-    private final Map<String, String> sessionRoles = new ConcurrentHashMap<>();
-
+    private final Map<String, String>  sessionRoles   = new ConcurrentHashMap<>();
     private final Map<String, Integer> sessionSiteIds = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         String docId = extractDocId(session);
-        rooms.computeIfAbsent(docId, id -> Collections.synchronizedSet(new HashSet<>())).add(session);
+        String role  = extractRole(session);
 
-        String role = extractRole(session);
+        rooms.computeIfAbsent(docId, id -> Collections.synchronizedSet(new HashSet<>()))
+                .add(session);
         sessionRoles.put(session.getId(), role);
 
+        // Seed session from DB or create empty — so share endpoint never sees null
         if (DocumentSession.get(docId) == null) {
             BlockCRDT saved = persistenceService.loadDocument(docId);
             if (saved != null) {
                 DocumentSession.seed(docId, saved);
-                System.out.println("Auto-loaded '" + docId + "' from database");
+                System.out.println("[WS] Auto-loaded '" + docId + "' from database");
+            } else {
+                DocumentSession.getOrCreate(docId);
             }
         }
 
-        System.out.println("Client connected to doc: " + docId + " as " + role);
+        System.out.println("[WS] Client connected — doc: " + docId + ", role: " + role
+                + ", session: " + session.getId());
     }
 
     @Override
@@ -53,41 +56,39 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         sessionRoles.remove(session.getId());
         sessionSiteIds.remove(session.getId());
 
-        System.out.println("Client disconnected from doc: " + docId);
+        System.out.println("[WS] Client disconnected — doc: " + docId
+                + ", status: " + status.getCode());
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String docId = extractDocId(session);
-
         JSONObject json = new JSONObject(message.getPayload());
         String type = json.getString("type");
 
-        if (type.equals("cursor_update")) {
+        // Always broadcast presence and cursor updates regardless of role
+        if (type.equals("cursor_update") || type.equals("presence")) {
             broadcast(docId, message.getPayload(), session);
             return;
         }
 
-        if (type.equals("presence")) {
-            broadcast(docId, message.getPayload(), session);
-            return;
-        }
-
+        // Block edit ops from viewers
         String role = sessionRoles.getOrDefault(session.getId(), "VIEWER");
         if ("VIEWER".equals(role)) {
-            System.out.println("[Security] Blocked edit op '" + type
-                    + "' from VIEWER session: " + session.getId());
+            System.out.println("[WS][Security] Blocked '" + type
+                    + "' from VIEWER " + session.getId());
             return;
         }
 
         BlockCRDT doc = DocumentSession.getOrCreate(docId);
-
         synchronized (doc) {
             applyOperation(doc, type, json);
         }
 
         broadcast(docId, message.getPayload(), session);
     }
+
+    // ── Operation applicators ───────────────────────────────────────────────
 
     private void applyOperation(BlockCRDT doc, String type, JSONObject json) {
         switch (type) {
@@ -99,80 +100,73 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
             case "delete_block" -> applyDeleteBlock(doc, json);
             case "split_block"  -> applySplitBlock(doc, json);
             case "merge_blocks" -> applyMergeBlocks(doc, json);
-            default -> System.err.println("Unknown op type: " + type);
+            default -> System.err.println("[WS] Unknown op type: " + type);
         }
     }
 
     private void applyInsertChar(BlockCRDT doc, JSONObject json) {
-        String blockId  = json.getString("blockId");
+        Block block = findOrWarnBlock(doc, json.getString("blockId"));
+        if (block == null) return;
         CharID charId   = parseCharID(json.getJSONObject("charId"));
         CharID parentId = json.isNull("parentId") ? null : parseCharID(json.getJSONObject("parentId"));
         char ch         = json.getString("char").charAt(0);
-
-        Block block = findOrWarnBlock(doc, blockId);
-        if (block == null) return;
-        CharNode node = new CharNode(charId, parentId, ch);
-        block.getContent().addChar(node);
+        block.getContent().addChar(new CharNode(charId, parentId, ch));
     }
 
     private void applyDeleteChar(BlockCRDT doc, JSONObject json) {
-        String blockId  = json.getString("blockId");
-        CharID targetId = parseCharID(json.getJSONObject("charId"));
-
-        Block block = findOrWarnBlock(doc, blockId);
+        Block block = findOrWarnBlock(doc, json.getString("blockId"));
         if (block == null) return;
-        new DeleteCharOperation(blockId, targetId).apply(block.getContent());
+        CharID targetId = parseCharID(json.getJSONObject("charId"));
+        new DeleteCharOperation(json.getString("blockId"), targetId).apply(block.getContent());
     }
 
     private void applyReplaceChar(BlockCRDT doc, JSONObject json) {
-        String blockId      = json.getString("blockId");
+        Block block = findOrWarnBlock(doc, json.getString("blockId"));
+        if (block == null) return;
         CharID oldId        = parseCharID(json.getJSONObject("oldCharId"));
         JSONObject newNodeJ = json.getJSONObject("newNode");
         CharID newId        = parseCharID(newNodeJ.getJSONObject("charId"));
         CharID newParent    = newNodeJ.isNull("parentId") ? null : parseCharID(newNodeJ.getJSONObject("parentId"));
         char ch             = newNodeJ.getString("char").charAt(0);
-
-        Block block = findOrWarnBlock(doc, blockId);
-        if (block == null) return;
-        CharNode newNode = new CharNode(newId, newParent, ch);
-        new ReplaceCharOperation(blockId, oldId, newNode).apply(block.getContent());
+        new ReplaceCharOperation(json.getString("blockId"), oldId, new CharNode(newId, newParent, ch))
+                .apply(block.getContent());
     }
 
     private void applyFormatting(BlockCRDT doc, JSONObject json) {
-        String blockId    = json.getString("blockId");
-        CharID targetId   = parseCharID(json.getJSONObject("charId"));
-        String formatType = json.getString("formatType");
-        boolean value     = json.getBoolean("value");
-
-        Block block = findOrWarnBlock(doc, blockId);
+        Block block = findOrWarnBlock(doc, json.getString("blockId"));
         if (block == null) return;
-        new FormattingOperation(targetId, formatType, value).apply(block.getContent());
+        new FormattingOperation(
+                parseCharID(json.getJSONObject("charId")),
+                json.getString("formatType"),
+                json.getBoolean("value")
+        ).apply(block.getContent());
     }
 
     private void applyInsertBlock(BlockCRDT doc, JSONObject json) {
         BlockID blockId  = parseBlockID(json.getJSONObject("blockId"));
-        BlockID parentId = json.isNull("parentBlockId") ? null : parseBlockID(json.getJSONObject("parentBlockId"));
-        Block newBlock   = new Block(blockId, parentId);
-        doc.addBlock(newBlock);
+        BlockID parentId = json.isNull("parentBlockId") ? null
+                : parseBlockID(json.getJSONObject("parentBlockId"));
+        doc.addBlock(new Block(blockId, parentId));
     }
 
     private void applyDeleteBlock(BlockCRDT doc, JSONObject json) {
-        BlockID targetId = parseBlockID(json.getJSONObject("blockId"));
-        doc.deleteBlock(targetId);
+        doc.deleteBlock(parseBlockID(json.getJSONObject("blockId")));
     }
 
     private void applySplitBlock(BlockCRDT doc, JSONObject json) {
-        BlockID targetId   = parseBlockID(json.getJSONObject("targetBlockId"));
-        int splitIndex     = json.getInt("splitIndex");
-        BlockID newBlockId = parseBlockID(json.getJSONObject("newBlockId"));
-        doc.splitBlock(targetId, splitIndex, newBlockId);
+        doc.splitBlock(
+                parseBlockID(json.getJSONObject("targetBlockId")),
+                json.getInt("splitIndex"),
+                parseBlockID(json.getJSONObject("newBlockId")));
     }
 
     private void applyMergeBlocks(BlockCRDT doc, JSONObject json) {
-        BlockID firstId  = parseBlockID(json.getJSONObject("firstBlockId"));
-        BlockID secondId = parseBlockID(json.getJSONObject("secondBlockId"));
-        doc.mergeBlocks(firstId, secondId);
+        doc.mergeBlocks(
+                parseBlockID(json.getJSONObject("firstBlockId")),
+                parseBlockID(json.getJSONObject("secondBlockId")));
     }
+
+    // ── Broadcast ──────────────────────────────────────────────────────────
 
     private void broadcast(String docId, String payload, WebSocketSession sender) throws Exception {
         Set<WebSocketSession> room = rooms.get(docId);
@@ -184,6 +178,8 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    // ── Helpers ────────────────────────────────────────────────────────────
+
     private CharID parseCharID(JSONObject json) {
         return new CharID(json.getInt("siteId"), json.getInt("myNum"));
     }
@@ -194,44 +190,56 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
 
     private Block findOrWarnBlock(BlockCRDT doc, String blockIdStr) {
         String[] parts = blockIdStr.replace("B", "").split("_");
-        BlockID id     = new BlockID(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-        Block block    = doc.findBlock(id);
-        if (block == null) System.err.println("Block not found: " + blockIdStr);
+        BlockID id = new BlockID(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+        Block block = doc.findBlock(id);
+        if (block == null) System.err.println("[WS] Block not found: " + blockIdStr);
         return block;
     }
 
+    /**
+     * Extracts the document ID from the WebSocket path.
+     * Path format: /document/<docId>
+     */
     private String extractDocId(WebSocketSession session) {
         String path = session.getUri().getPath();
-        return path.substring(path.lastIndexOf('/') + 1);
+        // path = "/document/myDoc"  →  strip "/document/"
+        int idx = path.lastIndexOf('/');
+        return idx >= 0 ? path.substring(idx + 1) : path;
     }
 
+    /**
+     * Extracts the role from the query string.
+     * Query format: role=EDITOR  or  role=VIEWER
+     * Defaults to VIEWER if absent or unrecognised.
+     */
     private String extractRole(WebSocketSession session) {
         String query = session.getUri().getQuery();
-        if (query == null) return "VIEWER";
+        if (query == null || query.isBlank()) return "VIEWER";
         for (String param : query.split("&")) {
             String[] kv = param.split("=", 2);
-            if (kv.length == 2 && "role".equalsIgnoreCase(kv[0])) {
+            if (kv.length == 2 && "role".equalsIgnoreCase(kv[0].trim())) {
                 return kv[1].trim().equalsIgnoreCase("EDITOR") ? "EDITOR" : "VIEWER";
             }
         }
         return "VIEWER";
     }
 
-    @Scheduled(fixedDelay = 30000)
+    // ── Auto-save ──────────────────────────────────────────────────────────
+
+    @Scheduled(fixedDelay = 30_000)
     public void autoSaveAll() {
         Map<String, BlockCRDT> sessions = DocumentSession.getAllSessions();
         if (sessions.isEmpty()) return;
-
-        System.out.println("[AutoSave] Saving " + sessions.size() + " active document(s)...");
+        System.out.println("[AutoSave] Saving " + sessions.size() + " document(s)...");
         for (Map.Entry<String, BlockCRDT> entry : sessions.entrySet()) {
-            String docId    = entry.getKey();
-            BlockCRDT doc   = entry.getValue();
+            String docId  = entry.getKey();
+            BlockCRDT doc = entry.getValue();
             try {
                 synchronized (doc) {
                     persistenceService.saveDocument(doc, docId, docId);
                 }
             } catch (Exception e) {
-                System.err.println("[AutoSave] Failed to save '" + docId + "': " + e.getMessage());
+                System.err.println("[AutoSave] Failed '" + docId + "': " + e.getMessage());
             }
         }
     }

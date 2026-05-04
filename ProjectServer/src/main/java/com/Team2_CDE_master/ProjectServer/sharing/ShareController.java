@@ -21,10 +21,10 @@ public class ShareController {
 
     @GetMapping("/{docId}")
     public ResponseEntity<?> getCodes(@PathVariable String docId) {
-        BlockCRDT session = DocumentSession.get(docId);
-        if (session == null) {
-            return ResponseEntity.notFound().build();
-        }
+        // Ensure session exists — getOrCreate is safe (returns existing if present).
+        // Previously used DocumentSession.get() which returned null and caused 404
+        // whenever the session hadn't been seeded yet.
+        DocumentSession.getOrCreate(docId);
 
         ShareRegistry.ShareCodes codes = shareRegistry.getOrCreate(docId);
 
