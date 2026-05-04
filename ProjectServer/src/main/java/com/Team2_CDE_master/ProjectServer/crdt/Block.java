@@ -17,6 +17,8 @@ public class Block {
     public CharCRDT getContent() { return content; }
     public boolean checkDeleted() { return isDeleted; }
     public void markDeleted() { this.isDeleted = true; }
+    // ELHEBEISHY'S PART
+    public void restore() { this.isDeleted = false; }
     public String getText() {
         return content.getText();
     }

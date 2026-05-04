@@ -19,13 +19,10 @@ public class ReconnectionHandler {
     }
 
     public void bufferOp(String json) {
-        if (!disconnected) return;
-        long now = System.currentTimeMillis();
-        if (now - disconnectTime > BUFFER_WINDOW_MS) {
+        // ELHEBEISHY'S PART
+        if (disconnected) {
             buffer.clear();
-            return;
         }
-        buffer.add(new TimedMessage(json, now));
     }
 
     public boolean canReconnect() {
@@ -41,12 +38,10 @@ public class ReconnectionHandler {
     }
 
     public void onReconnected(NetworkManager nm) {
-        Deque<String> ops = getBufferedOps();
+        // ELHEBEISHY'S PART
         buffer.clear();
         disconnected = false;
-        for (String json : ops) {
-            nm.sendRawMessage(json);
-        }
+        disconnectTime = 0;
     }
 
     public boolean isDisconnected() {

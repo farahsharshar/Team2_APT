@@ -59,8 +59,16 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     public void sendOperation(String jsonPayload) {
         if (isOpen()) {
-            send(jsonPayload);
-            System.out.println("Sent: " + jsonPayload);
+            // ELHEBEISHY'S PART
+            try {
+                send(jsonPayload);
+                System.out.println("Sent: " + jsonPayload);
+            } catch (Exception ex) {
+                System.err.println("Send failed: " + ex.getMessage());
+                if (listener != null) {
+                    listener.onError(ex.getMessage());
+                }
+            }
         } else {
             System.err.println("Cannot send: not connected");
         }

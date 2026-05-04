@@ -18,6 +18,17 @@ public class CharCRDT {
 
     public void addChar(CharNode newNode) {
 
+        // ELHEBEISHY'S PART
+        CharNode existing = nodeMap.get(key(newNode.getMyId()));
+        if (existing != null) {
+            if (existing.checkDeleted()) {
+                existing.restore();
+                existing.setBold(newNode.checkBold());
+                existing.setItalic(newNode.checkItalic());
+            }
+            return;
+        }
+
         int parentPos = -1;
 
         if (newNode.getParentId() != null) {

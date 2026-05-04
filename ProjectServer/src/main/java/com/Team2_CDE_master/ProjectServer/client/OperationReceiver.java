@@ -114,7 +114,13 @@ public class OperationReceiver implements OperationListener {
         CharID parentId = json.isNull("parentId") ? null : parseCharID(json.getJSONObject("parentId"));
         char ch = json.getString("char").charAt(0);
         Block block = findBlock(blockIdStr);
-        if (block != null) block.getContent().addChar(new CharNode(charId, parentId, ch));
+        // ELHEBEISHY'S PART
+        if (block != null) {
+            CharNode node = new CharNode(charId, parentId, ch);
+            node.setBold(json.optBoolean("bold", false));
+            node.setItalic(json.optBoolean("italic", false));
+            block.getContent().addChar(node);
+        }
     }
 
     private void applyDeleteChar(JSONObject json) {
@@ -148,9 +154,8 @@ public class OperationReceiver implements OperationListener {
     private void applyInsertBlock(JSONObject json) {
         BlockID id = parseBlockID(json.getJSONObject("blockId"));
         BlockID parent = json.isNull("parentBlockId") ? null : parseBlockID(json.getJSONObject("parentBlockId"));
-        if (doc.findBlock(id) == null) {
-            doc.addBlock(new Block(id, parent));
-        }
+        // ELHEBEISHY'S PART
+        doc.addBlock(new Block(id, parent));
     }
 
     private void applyDeleteBlock(JSONObject json) {

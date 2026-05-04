@@ -23,6 +23,8 @@ public class CharNode {
     public boolean checkBold() { return isBold; }
     public boolean checkItalic() { return isItalic; }
     public void markDeleted() { this.isDeleted = true; }
+    // ELHEBEISHY'S PART
+    public void restore() { this.isDeleted = false; }
     public void setBold(boolean val) { this.isBold = val; }
     public void setItalic(boolean val) { this.isItalic = val; }
     public String toString() {
