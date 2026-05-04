@@ -23,6 +23,12 @@ public class OperationApplier implements OperationListener {
 
     private Consumer<Integer> onPresenceLeave;
 
+    // ELHEBEISHY'S PART
+    private Runnable onFullSyncApplied;
+
+    // ELHEBEISHY'S PART
+    private Consumer<String> onErrorMessage;
+
     public OperationApplier(BlockCRDT localDoc) {
         this.localDoc = localDoc;
     }
@@ -33,6 +39,10 @@ public class OperationApplier implements OperationListener {
     public void setOnCursorUpdate(BiConsumer<Integer, Integer> c) { this.onCursorUpdate = c; }
     public void setOnPresenceJoin(BiConsumer<Integer, String> c) { this.onPresenceJoin = c; }
     public void setOnPresenceLeave(Consumer<Integer> c) { this.onPresenceLeave = c; }
+    // ELHEBEISHY'S PART
+    public void setOnFullSyncApplied(Runnable r) { this.onFullSyncApplied = r; }
+    // ELHEBEISHY'S PART
+    public void setOnErrorMessage(Consumer<String> c) { this.onErrorMessage = c; }
 
     @Override
     public void onConnected() {
@@ -47,6 +57,8 @@ public class OperationApplier implements OperationListener {
     @Override
     public void onError(String errorMessage) {
         System.err.println("[OperationApplier] Error: " + errorMessage);
+        // ELHEBEISHY'S PART
+        if (onErrorMessage != null) onErrorMessage.accept(errorMessage);
     }
 
     @Override
@@ -76,6 +88,8 @@ public class OperationApplier implements OperationListener {
             if (type.equals("full_sync")) {
                 applyFullSync(json);
                 if (onDocumentChanged != null) onDocumentChanged.run();
+                // ELHEBEISHY'S PART
+                if (onFullSyncApplied != null) onFullSyncApplied.run();
                 return;
             }
 
@@ -111,7 +125,13 @@ public class OperationApplier implements OperationListener {
         CharID parentId = json.isNull("parentId") ? null : parseCharID(json.getJSONObject("parentId"));
         char ch = json.getString("char").charAt(0);
         Block block = findBlock(blockIdStr);
-        if (block != null) block.getContent().addChar(new CharNode(charId, parentId, ch));
+        // ELHEBEISHY'S PART
+        if (block != null) {
+            CharNode node = new CharNode(charId, parentId, ch);
+            node.setBold(json.optBoolean("bold", false));
+            node.setItalic(json.optBoolean("italic", false));
+            block.getContent().addChar(node);
+        }
     }
 
     private void applyDeleteChar(JSONObject json) {
@@ -145,9 +165,8 @@ public class OperationApplier implements OperationListener {
     private void applyInsertBlock(JSONObject json) {
         BlockID id     = parseBlockID(json.getJSONObject("blockId"));
         BlockID parent = json.isNull("parentBlockId") ? null : parseBlockID(json.getJSONObject("parentBlockId"));
-        if (localDoc.findBlock(id) == null) {
-            localDoc.addBlock(new Block(id, parent));
-        }
+        // ELHEBEISHY'S PART
+        localDoc.addBlock(new Block(id, parent));
     }
 
     private void applyDeleteBlock(JSONObject json) {
@@ -172,6 +191,9 @@ public class OperationApplier implements OperationListener {
         org.json.JSONArray blocks = json.getJSONArray("blocks");
 
         synchronized (localDoc) {
+            // ELHEBEISHY'S PART
+            localDoc.clear();
+
             for (int i = 0; i < blocks.length(); i++) {
                 org.json.JSONObject blockJson = blocks.getJSONObject(i);
 

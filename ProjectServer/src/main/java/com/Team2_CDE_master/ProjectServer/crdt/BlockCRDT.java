@@ -17,6 +17,15 @@ public class BlockCRDT {
     }
 
     public void addBlock(Block newBlock) {
+        // ELHEBEISHY'S PART
+        Block existing = blockMap.get(key(newBlock.getMyId()));
+        if (existing != null) {
+            if (existing.checkDeleted()) {
+                existing.restore();
+            }
+            return;
+        }
+
         int parentPos = -1;
         if (newBlock.getParentId() != null) {
             for (int i = 0; i < allBlocks.size(); i++) {
@@ -49,6 +58,12 @@ public class BlockCRDT {
 
         allBlocks.add(insertAt, newBlock);
         blockMap.put(key(newBlock.getMyId()), newBlock);
+    }
+
+    // ELHEBEISHY'S PART
+    public void clear() {
+        allBlocks.clear();
+        blockMap.clear();
     }
 
     public void deleteBlock(BlockID targetId) {

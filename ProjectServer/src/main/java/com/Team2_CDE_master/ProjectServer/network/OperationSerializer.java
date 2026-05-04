@@ -6,6 +6,13 @@ import org.json.JSONObject;
 
 public class OperationSerializer {
     public static String insertChar(String blockId, CharID charId, CharID parentId, char ch) {
+        // ELHEBEISHY'S PART
+        return insertChar(blockId, charId, parentId, ch, false, false);
+    }
+
+    // ELHEBEISHY'S PART
+    public static String insertChar(String blockId, CharID charId, CharID parentId, char ch,
+                                    boolean bold, boolean italic) {
         JSONObject json = new JSONObject();
         json.put("type", "insert_char");
         json.put("blockId", blockId);
@@ -16,6 +23,8 @@ public class OperationSerializer {
             json.put("parentId", JSONObject.NULL);
         }
         json.put("char", String.valueOf(ch));
+        json.put("bold", bold);
+        json.put("italic", italic);
         return json.toString();
     }
 

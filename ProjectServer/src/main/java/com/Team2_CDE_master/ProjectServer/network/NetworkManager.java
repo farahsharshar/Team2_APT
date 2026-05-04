@@ -82,6 +82,32 @@ public class NetworkManager {
 
     public ReconnectionHandler getReconnectionHandler() { return reconnHandler; }
 
+    // ELHEBEISHY'S PART
+    public void syncCountersFrom(BlockCRDT doc) {
+        if (doc == null) return;
+
+        int maxChar = charCounter.get();
+        int maxBlock = blockCounter.get();
+
+        synchronized (doc) {
+            for (Block block : doc.allBlocks) {
+                if (block.getMyId().siteId == siteId) {
+                    maxBlock = Math.max(maxBlock, block.getMyId().counter);
+                }
+                for (CharNode node : block.getContent().allNodes) {
+                    if (node.getMyId().siteId == siteId) {
+                        maxChar = Math.max(maxChar, node.getMyId().myNum);
+                    }
+                }
+            }
+        }
+
+        final int syncedChar = maxChar;
+        final int syncedBlock = maxBlock;
+        charCounter.updateAndGet(current -> Math.max(current, syncedChar));
+        blockCounter.updateAndGet(current -> Math.max(current, syncedBlock));
+    }
+
     public void sendInsertChar(String blockId, CharID charId, CharID parentId, char ch) {
         if (!isConnected()) { System.err.println("Not connected"); return; }
         wsClient.sendOperation(OperationSerializer.insertChar(blockId, charId, parentId, ch));
@@ -124,7 +150,9 @@ public class NetworkManager {
 
     public void sendRawMessage(String json) {
         if (!isConnected()) {
+            // ELHEBEISHY'S PART
             reconnHandler.bufferOp(json);
+            System.err.println("Cannot send: not connected");
             return;
         }
         wsClient.sendOperation(json);

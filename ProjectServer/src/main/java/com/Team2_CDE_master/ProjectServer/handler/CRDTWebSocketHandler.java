@@ -121,7 +121,11 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         CharID charId   = parseCharID(json.getJSONObject("charId"));
         CharID parentId = json.isNull("parentId") ? null : parseCharID(json.getJSONObject("parentId"));
         char ch         = json.getString("char").charAt(0);
-        block.getContent().addChar(new CharNode(charId, parentId, ch));
+        // ELHEBEISHY'S PART
+        CharNode node = new CharNode(charId, parentId, ch);
+        node.setBold(json.optBoolean("bold", false));
+        node.setItalic(json.optBoolean("italic", false));
+        block.getContent().addChar(node);
     }
 
     private void applyDeleteChar(BlockCRDT doc, JSONObject json) {

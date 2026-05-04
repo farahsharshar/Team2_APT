@@ -1,16 +1,41 @@
 package com.Team2_CDE_master.ProjectServer.client;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class UndoRedoManager {
 
-    private static final int MAX = 10;
+    // ELHEBEISHY'S PART
+    private static final int MAX = 1000;
 
-    private final ArrayDeque<String[]> undoStack = new ArrayDeque<>();
-    private final ArrayDeque<String[]> redoStack = new ArrayDeque<>();
+    // ELHEBEISHY'S PART
+    private static final class OperationGroup {
+        private final List<String> originalOps;
+        private final List<String> inverseOps;
+
+        private OperationGroup(List<String> originalOps, List<String> inverseOps) {
+            this.originalOps = List.copyOf(originalOps);
+            this.inverseOps = List.copyOf(inverseOps);
+        }
+    }
+
+    // ELHEBEISHY'S PART
+    private final ArrayDeque<OperationGroup> undoStack = new ArrayDeque<>();
+    private final ArrayDeque<OperationGroup> redoStack = new ArrayDeque<>();
 
     public void record(String originalJson, String inverseJson) {
-        undoStack.push(new String[]{originalJson, inverseJson});
+        // ELHEBEISHY'S PART
+        recordGroup(Collections.singletonList(originalJson), Collections.singletonList(inverseJson));
+    }
+
+    // ELHEBEISHY'S PART
+    public void recordGroup(List<String> originalJsons, List<String> inverseJsons) {
+        if (originalJsons == null || inverseJsons == null || originalJsons.isEmpty() || inverseJsons.isEmpty()) {
+            return;
+        }
+        undoStack.push(new OperationGroup(originalJsons, inverseJsons));
         redoStack.clear();
         while (undoStack.size() > MAX) {
             undoStack.removeLast();
@@ -18,17 +43,37 @@ public class UndoRedoManager {
     }
 
     public String undo() {
-        if (undoStack.isEmpty()) return null;
-        String[] entry = undoStack.pop();
-        redoStack.push(new String[]{entry[1], entry[0]});
-        return entry[1];
+        // ELHEBEISHY'S PART
+        List<String> ops = undoOperations();
+        return ops.isEmpty() ? null : ops.get(0);
     }
 
     public String redo() {
-        if (redoStack.isEmpty()) return null;
-        String[] entry = redoStack.pop();
-        undoStack.push(new String[]{entry[1], entry[0]});
-        return entry[1];
+        // ELHEBEISHY'S PART
+        List<String> ops = redoOperations();
+        return ops.isEmpty() ? null : ops.get(0);
+    }
+
+    // ELHEBEISHY'S PART
+    public List<String> undoOperations() {
+        if (undoStack.isEmpty()) return Collections.emptyList();
+        OperationGroup entry = undoStack.pop();
+        redoStack.push(new OperationGroup(entry.inverseOps, entry.originalOps));
+        return new ArrayList<>(entry.inverseOps);
+    }
+
+    // ELHEBEISHY'S PART
+    public List<String> redoOperations() {
+        if (redoStack.isEmpty()) return Collections.emptyList();
+        OperationGroup entry = redoStack.pop();
+        undoStack.push(new OperationGroup(entry.inverseOps, entry.originalOps));
+        return new ArrayList<>(entry.inverseOps);
+    }
+
+    // ELHEBEISHY'S PART
+    public void clear() {
+        undoStack.clear();
+        redoStack.clear();
     }
 
     public boolean canUndo() {
