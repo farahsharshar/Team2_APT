@@ -73,6 +73,11 @@ public class OperationApplier implements OperationListener {
                 }
                 return;
             }
+            if (type.equals("full_sync")) {
+                applyFullSync(json);
+                if (onDocumentChanged != null) onDocumentChanged.run();
+                return;
+            }
 
             synchronized (localDoc) {
                 applyOp(type, json);
@@ -163,7 +168,58 @@ public class OperationApplier implements OperationListener {
             parseBlockID(json.getJSONObject("secondBlockId"))
         );
     }
+    private void applyFullSync(org.json.JSONObject json) {
+        org.json.JSONArray blocks = json.getJSONArray("blocks");
 
+        synchronized (localDoc) {
+            for (int i = 0; i < blocks.length(); i++) {
+                org.json.JSONObject blockJson = blocks.getJSONObject(i);
+
+                BlockID blockId = new BlockID(
+                        blockJson.getInt("siteId"),
+                        blockJson.getInt("counter"));
+
+                BlockID parentId = blockJson.isNull("parentId") ? null :
+                        new BlockID(
+                                blockJson.getJSONObject("parentId").getInt("siteId"),
+                                blockJson.getJSONObject("parentId").getInt("counter"));
+
+                // Only add the block if not already present
+                if (localDoc.findBlock(blockId) == null) {
+                    localDoc.addBlock(new Block(blockId, parentId));
+                }
+
+                Block block = localDoc.findBlock(blockId);
+                if (block == null) continue;
+
+                org.json.JSONArray chars = blockJson.getJSONArray("chars");
+                for (int j = 0; j < chars.length(); j++) {
+                    org.json.JSONObject charJson = chars.getJSONObject(j);
+
+                    CharID charId = new CharID(
+                            charJson.getInt("siteId"),
+                            charJson.getInt("myNum"));
+
+                    // Skip if already present
+                    if (block.getContent().findNode(charId) != null) continue;
+
+                    CharID charParent = charJson.isNull("parentId") ? null :
+                            new CharID(
+                                    charJson.getJSONObject("parentId").getInt("siteId"),
+                                    charJson.getJSONObject("parentId").getInt("myNum"));
+
+                    char ch = charJson.getString("char").charAt(0);
+                    CharNode node = new CharNode(charId, charParent, ch);
+
+                    if (charJson.getBoolean("deleted")) node.markDeleted();
+                    node.setBold(charJson.getBoolean("bold"));
+                    node.setItalic(charJson.getBoolean("italic"));
+
+                    block.getContent().addChar(node);
+                }
+            }
+        }
+    }
 
     private CharID parseCharID(JSONObject j) {
         return new CharID(j.getInt("siteId"), j.getInt("myNum"));

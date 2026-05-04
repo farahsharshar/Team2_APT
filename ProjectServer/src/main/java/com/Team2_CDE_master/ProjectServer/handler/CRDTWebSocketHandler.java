@@ -32,7 +32,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
                 .add(session);
         sessionRoles.put(session.getId(), role);
 
-        // Seed session from DB or create empty — so share endpoint never sees null
         if (DocumentSession.get(docId) == null) {
             BlockCRDT saved = persistenceService.loadDocument(docId);
             if (saved != null) {
@@ -41,6 +40,18 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
             } else {
                 DocumentSession.getOrCreate(docId);
             }
+        }
+
+        // ── Send full document state to the newly connected client ────────────
+        try {
+            BlockCRDT doc = DocumentSession.get(docId);
+            if (doc != null) {
+                synchronized (doc) {
+                    sendFullSync(session, doc);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[WS] Failed to send full sync: " + e.getMessage());
         }
 
         System.out.println("[WS] Client connected — doc: " + docId + ", role: " + role
@@ -130,6 +141,57 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         char ch             = newNodeJ.getString("char").charAt(0);
         new ReplaceCharOperation(json.getString("blockId"), oldId, new CharNode(newId, newParent, ch))
                 .apply(block.getContent());
+    }
+//3ashan lama a share file by code yb2a 3ando el text el 2adem
+    private void sendFullSync(WebSocketSession session, BlockCRDT doc) throws Exception {
+        org.json.JSONArray blocks = new org.json.JSONArray();
+
+        for (Block block : doc.allBlocks) {
+            if (block.checkDeleted()) continue;
+
+            org.json.JSONObject blockJson = new org.json.JSONObject();
+            blockJson.put("siteId",  block.getMyId().siteId);
+            blockJson.put("counter", block.getMyId().counter);
+
+            if (block.getParentId() != null) {
+                org.json.JSONObject parentJson = new org.json.JSONObject();
+                parentJson.put("siteId",  block.getParentId().siteId);
+                parentJson.put("counter", block.getParentId().counter);
+                blockJson.put("parentId", parentJson);
+            } else {
+                blockJson.put("parentId", org.json.JSONObject.NULL);
+            }
+
+            org.json.JSONArray chars = new org.json.JSONArray();
+            for (CharNode node : block.getContent().allNodes) {
+                org.json.JSONObject charJson = new org.json.JSONObject();
+                charJson.put("siteId", node.getMyId().siteId);
+                charJson.put("myNum",  node.getMyId().myNum);
+
+                if (node.getParentId() != null) {
+                    org.json.JSONObject cp = new org.json.JSONObject();
+                    cp.put("siteId", node.getParentId().siteId);
+                    cp.put("myNum",  node.getParentId().myNum);
+                    charJson.put("parentId", cp);
+                } else {
+                    charJson.put("parentId", org.json.JSONObject.NULL);
+                }
+
+                charJson.put("char",    String.valueOf(node.getMyChar()));
+                charJson.put("deleted", node.checkDeleted());
+                charJson.put("bold",    node.checkBold());
+                charJson.put("italic",  node.checkItalic());
+                chars.put(charJson);
+            }
+            blockJson.put("chars", chars);
+            blocks.put(blockJson);
+        }
+
+        org.json.JSONObject msg = new org.json.JSONObject();
+        msg.put("type",   "full_sync");
+        msg.put("blocks", blocks);
+
+        session.sendMessage(new TextMessage(msg.toString()));
     }
 
     private void applyFormatting(BlockCRDT doc, JSONObject json) {
