@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.util.function.Supplier;
 
 public class FileManager {
 
@@ -21,21 +22,27 @@ public class FileManager {
     }
 
     private final Component parentComponent;
+    private final Supplier<String> serverBaseSupplier;
     private FileActionListener actionListener;
     private int siteId;
 
-    private static final String SERVER_BASE = "http://localhost:8081";
     private final HttpClient http = HttpClient.newHttpClient();
 
-    public FileManager(Component parentComponent) {
+    public FileManager(Component parentComponent, Supplier<String> serverBaseSupplier) {
         this.parentComponent = parentComponent;
+        this.serverBaseSupplier = serverBaseSupplier;
     }
+
     public void setSiteId(int siteId) {
         this.siteId = siteId;
     }
 
     public void setFileActionListener(FileActionListener listener) {
         this.actionListener = listener;
+    }
+
+    private String getServerBase() {
+        return serverBaseSupplier.get();
     }
 
     public void createNewDocument() {
@@ -52,7 +59,6 @@ public class FileManager {
         docId = docId.trim();
 
         BlockCRDT newDoc = new BlockCRDT();
-
         BlockID firstBlockId = new BlockID(siteId, 1);
         Block firstBlock = new Block(firstBlockId, null);
         newDoc.addBlock(firstBlock);
@@ -164,7 +170,7 @@ public class FileManager {
         }
         newName = newName.trim();
         try {
-            String url = SERVER_BASE + "/api/documents?docId="
+            String url = getServerBase() + "/api/documents?docId="
                     + java.net.URLEncoder.encode(newName, StandardCharsets.UTF_8)
                     + "&name="
                     + java.net.URLEncoder.encode(newName, StandardCharsets.UTF_8);
@@ -203,7 +209,7 @@ public class FileManager {
             return false;
         }
         try {
-            String url = SERVER_BASE + "/api/documents/"
+            String url = getServerBase() + "/api/documents/"
                     + java.net.URLEncoder.encode(docId, StandardCharsets.UTF_8);
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -229,39 +235,11 @@ public class FileManager {
         return true;
     }
 
-    private String buildPlainText(BlockCRDT doc) {
-        StringBuilder sb = new StringBuilder();
-        boolean firstBlock = true;
-        for (Block block : doc.allBlocks) {
-            if (block.checkDeleted()) continue;
-            if (!firstBlock) sb.append("\n");
-            firstBlock = false;
-            for (CharNode node : block.getContent().allNodes) {
-                if (!node.checkDeleted()) {
-                    sb.append(node.getMyChar());
-                }
-            }
-        }
-        return sb.toString();
-    }
-
-    private int countChars(BlockCRDT doc) {
-        int total = 0;
-        for (Block block : doc.allBlocks) {
-            if (block.checkDeleted()) continue;
-            total += block.getContent().getLength();
-        }
-        return total;
-    }
-
-    private void notify(String msg) {
-        if (actionListener != null) actionListener.onStatusMessage(msg);
-        else System.out.println("[FileManager] " + msg);
-    }
     public void openDocument() {
+        String serverBase = getServerBase();
         new Thread(() -> {
             try {
-                String url = SERVER_BASE + "/api/documents";
+                String url = serverBase + "/api/documents";
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(url))
                         .GET()
@@ -278,7 +256,6 @@ public class FileManager {
                     return;
                 }
 
-                // Parse the JSON array of documents manually
                 String body = response.body();
                 java.util.List<String[]> docs = parseDocumentList(body);
 
@@ -290,7 +267,7 @@ public class FileManager {
                     return;
                 }
 
-                SwingUtilities.invokeLater(() -> showOpenDialog(docs));
+                SwingUtilities.invokeLater(() -> showOpenDialog(docs, serverBase));
 
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() ->
@@ -303,7 +280,6 @@ public class FileManager {
 
     private java.util.List<String[]> parseDocumentList(String json) {
         java.util.List<String[]> result = new java.util.ArrayList<>();
-        // Each entry looks like: {"id":"...","name":"...","updatedAt":"..."}
         int idx = 0;
         while (true) {
             int start = json.indexOf('{', idx);
@@ -333,13 +309,11 @@ public class FileManager {
         return end < 0 ? "" : json.substring(start, end);
     }
 
-    private void showOpenDialog(java.util.List<String[]> docs) {
-        // Build display strings for the list
+    private void showOpenDialog(java.util.List<String[]> docs, String serverBase) {
         String[] displayNames = new String[docs.size()];
         for (int i = 0; i < docs.size(); i++) {
             String name      = docs.get(i)[1];
             String updatedAt = docs.get(i)[2];
-            // Format: "MyDoc  (saved: 2026-05-04T10:30:00)"
             displayNames[i] = updatedAt.isEmpty()
                     ? name
                     : name + "  (saved: " + updatedAt.replace("T", " ") + ")";
@@ -375,14 +349,14 @@ public class FileManager {
         }
 
         String selectedId = docs.get(selectedIndex)[0];
-        loadDocumentFromServer(selectedId);
+        loadDocumentFromServer(selectedId, serverBase);
     }
 
-    private void loadDocumentFromServer(String docId) {
+    private void loadDocumentFromServer(String docId, String serverBase) {
         notify("Loading '" + docId + "' from server...");
         new Thread(() -> {
             try {
-                String url = SERVER_BASE + "/api/documents/"
+                String url = serverBase + "/api/documents/"
                         + java.net.URLEncoder.encode(docId, java.nio.charset.StandardCharsets.UTF_8);
 
                 HttpRequest request = HttpRequest.newBuilder()
@@ -394,7 +368,6 @@ public class FileManager {
                         http.send(request, HttpResponse.BodyHandlers.ofString());
 
                 if (response.statusCode() == 200) {
-                    // Parse the blocks field out of the response
                     String body = response.body();
                     com.Team2_CDE_master.ProjectServer.crdt.BlockCRDT loadedDoc = parseBlocksFromResponse(body);
 
@@ -429,16 +402,12 @@ public class FileManager {
         com.Team2_CDE_master.ProjectServer.crdt.BlockCRDT doc =
                 new com.Team2_CDE_master.ProjectServer.crdt.BlockCRDT();
         try {
-            // Extract the "blocks" string value from the JSON response
             String blocksKey = "\"blocks\":\"";
             int start = body.indexOf(blocksKey);
-            if (start < 0) return doc; // no blocks field, return empty
+            if (start < 0) return doc;
 
             start += blocksKey.length();
 
-            // The blocks value is a JSON-encoded string, find its end
-            // It was serialized with toString() so it's wrapped in quotes and escaped
-            // We need to extract and unescape it
             StringBuilder sb = new StringBuilder();
             int i = start;
             while (i < body.length()) {
@@ -450,7 +419,7 @@ public class FileManager {
                     if (next == 'n')       { sb.append('\n'); i += 2; continue; }
                     if (next == 't')       { sb.append('\t'); i += 2; continue; }
                 }
-                if (c == '"') break; // end of the string value
+                if (c == '"') break;
                 sb.append(c);
                 i++;
             }
@@ -510,5 +479,35 @@ public class FileManager {
             System.err.println("[FileManager] Failed to parse blocks: " + e.getMessage());
         }
         return doc;
+    }
+
+    private String buildPlainText(BlockCRDT doc) {
+        StringBuilder sb = new StringBuilder();
+        boolean firstBlock = true;
+        for (Block block : doc.allBlocks) {
+            if (block.checkDeleted()) continue;
+            if (!firstBlock) sb.append("\n");
+            firstBlock = false;
+            for (CharNode node : block.getContent().allNodes) {
+                if (!node.checkDeleted()) {
+                    sb.append(node.getMyChar());
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private int countChars(BlockCRDT doc) {
+        int total = 0;
+        for (Block block : doc.allBlocks) {
+            if (block.checkDeleted()) continue;
+            total += block.getContent().getLength();
+        }
+        return total;
+    }
+
+    private void notify(String msg) {
+        if (actionListener != null) actionListener.onStatusMessage(msg);
+        else System.out.println("[FileManager] " + msg);
     }
 }

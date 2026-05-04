@@ -10,14 +10,6 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     private final OperationListener listener;
 
-    /**
-     * @param serverUrl  base WS URL, e.g. "ws://localhost:8080"
-     * @param docId      document ID
-     * @param role       "EDITOR" or "VIEWER"
-     * @param listener   operation listener
-     *
-     * Final URI: ws://localhost:8080/document/<docId>?role=<role>
-     */
     public CRDTWebSocketClient(String serverUrl, String docId, String role, OperationListener listener)
             throws URISyntaxException {
         super(new URI(serverUrl + "/document/" + docId + "?role=" + role));
@@ -59,7 +51,6 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     public void sendOperation(String jsonPayload) {
         if (isOpen()) {
-            // ELHEBEISHY'S PART
             try {
                 send(jsonPayload);
                 System.out.println("Sent: " + jsonPayload);

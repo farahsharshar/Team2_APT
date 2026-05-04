@@ -42,7 +42,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
             }
         }
 
-        // ── Send full document state to the newly connected client ────────────
         try {
             BlockCRDT doc = DocumentSession.get(docId);
             if (doc != null) {
@@ -77,13 +76,16 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         JSONObject json = new JSONObject(message.getPayload());
         String type = json.getString("type");
 
-        // Always broadcast presence and cursor updates regardless of role
         if (type.equals("cursor_update") || type.equals("presence")) {
             broadcast(docId, message.getPayload(), session);
             return;
         }
 
-        // Block edit ops from viewers
+        if (type.equals("document_deleted")) {
+            broadcast(docId, message.getPayload(), session);
+            return;
+        }
+
         String role = sessionRoles.getOrDefault(session.getId(), "VIEWER");
         if ("VIEWER".equals(role)) {
             System.out.println("[WS][Security] Blocked '" + type
@@ -98,8 +100,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
 
         broadcast(docId, message.getPayload(), session);
     }
-
-    // ── Operation applicators ───────────────────────────────────────────────
 
     private void applyOperation(BlockCRDT doc, String type, JSONObject json) {
         switch (type) {
@@ -121,7 +121,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         CharID charId   = parseCharID(json.getJSONObject("charId"));
         CharID parentId = json.isNull("parentId") ? null : parseCharID(json.getJSONObject("parentId"));
         char ch         = json.getString("char").charAt(0);
-        // ELHEBEISHY'S PART
         CharNode node = new CharNode(charId, parentId, ch);
         node.setBold(json.optBoolean("bold", false));
         node.setItalic(json.optBoolean("italic", false));
@@ -146,7 +145,7 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         new ReplaceCharOperation(json.getString("blockId"), oldId, new CharNode(newId, newParent, ch))
                 .apply(block.getContent());
     }
-//3ashan lama a share file by code yb2a 3ando el text el 2adem
+
     private void sendFullSync(WebSocketSession session, BlockCRDT doc) throws Exception {
         org.json.JSONArray blocks = new org.json.JSONArray();
 
@@ -232,8 +231,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
                 parseBlockID(json.getJSONObject("secondBlockId")));
     }
 
-    // ── Broadcast ──────────────────────────────────────────────────────────
-
     private void broadcast(String docId, String payload, WebSocketSession sender) throws Exception {
         Set<WebSocketSession> room = rooms.get(docId);
         if (room == null) return;
@@ -243,8 +240,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
             }
         }
     }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
 
     private CharID parseCharID(JSONObject json) {
         return new CharID(json.getInt("siteId"), json.getInt("myNum"));
@@ -262,22 +257,12 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         return block;
     }
 
-    /**
-     * Extracts the document ID from the WebSocket path.
-     * Path format: /document/<docId>
-     */
     private String extractDocId(WebSocketSession session) {
         String path = session.getUri().getPath();
-        // path = "/document/myDoc"  →  strip "/document/"
         int idx = path.lastIndexOf('/');
         return idx >= 0 ? path.substring(idx + 1) : path;
     }
 
-    /**
-     * Extracts the role from the query string.
-     * Query format: role=EDITOR  or  role=VIEWER
-     * Defaults to VIEWER if absent or unrecognised.
-     */
     private String extractRole(WebSocketSession session) {
         String query = session.getUri().getQuery();
         if (query == null || query.isBlank()) return "VIEWER";
@@ -289,8 +274,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         }
         return "VIEWER";
     }
-
-    // ── Auto-save ──────────────────────────────────────────────────────────
 
     @Scheduled(fixedDelay = 30_000)
     public void autoSaveAll() {

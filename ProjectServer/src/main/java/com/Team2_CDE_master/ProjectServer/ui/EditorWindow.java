@@ -14,11 +14,8 @@ import java.util.*;
 
 public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListener {
 
-    // ── Single server address used by both HTTP and WebSocket ──────────────
-    private static final String SERVER_HOST = "localhost";
+    private static final String DEFAULT_SERVER_HOST = "localhost";
     private static final int    SERVER_PORT = 8081;
-    private static final String HTTP_BASE   = "http://" + SERVER_HOST + ":" + SERVER_PORT;
-    private static final String WS_BASE     = "ws://"   + SERVER_HOST + ":" + SERVER_PORT;
 
     private BlockCRDT localDoc = new BlockCRDT();
     private int siteId = 1;
@@ -27,21 +24,22 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
 
     private JTextPane textPane;
     private JLabel statusLabel;
+    private JTextField serverHostField;
     private JTextField docIdField;
     private JTextField siteIdField;
     private JButton connectBtn;
     private JButton boldBtn;
     private JButton italicBtn;
-    // ELHEBEISHY'S PART
     private JButton undoBtn;
     private JButton redoBtn;
+    private JButton insertBlockBtn;
+    private JButton deleteBlockBtn;
     private FileToolbar fileToolbar;
     private JButton shareBtn;
     private JLabel usersLabel;
     private JToggleButton viewerBtn;
 
     private final Map<Integer, Integer> remoteCursors = new LinkedHashMap<>();
-    // ELHEBEISHY'S PART
     private final Map<Integer, Object> remoteCursorHighlights = new LinkedHashMap<>();
     private static final Color[] USER_COLORS = {
             new Color(200, 50,  50),
@@ -52,7 +50,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
 
     private boolean isUpdating = false;
 
-    // ELHEBEISHY'S PART
     private boolean activeBold = false;
     private boolean activeItalic = false;
 
@@ -77,14 +74,17 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         menuBar.add(new JMenu("View"));
         setJMenuBar(menuBar);
 
-        fileToolbar = new FileToolbar(this, siteId);
+        fileToolbar = new FileToolbar(this, siteId, this::getHttpBase);
         fileToolbar.setToolbarListener(this);
 
         JPanel connectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        serverHostField = new JTextField(DEFAULT_SERVER_HOST, 12);
         docIdField  = new JTextField("myDoc", 10);
         siteIdField = new JTextField("1", 3);
         connectBtn  = new JButton("Connect");
 
+        connectPanel.add(new JLabel("Server:"));
+        connectPanel.add(serverHostField);
         connectPanel.add(new JLabel("Doc:"));
         connectPanel.add(docIdField);
         connectPanel.add(new JLabel("Site:"));
@@ -109,17 +109,25 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         italicBtn.setEnabled(false);
         italicBtn.setToolTipText("Italic");
 
-        // ELHEBEISHY'S PART
         undoBtn = new JButton("Undo");
         undoBtn.setEnabled(false);
         undoBtn.setToolTipText("Undo");
         undoBtn.addActionListener(e -> handleUndo());
 
-        // ELHEBEISHY'S PART
         redoBtn = new JButton("Redo");
         redoBtn.setEnabled(false);
         redoBtn.setToolTipText("Redo");
         redoBtn.addActionListener(e -> handleRedo());
+
+        insertBlockBtn = new JButton("+ Block");
+        insertBlockBtn.setEnabled(false);
+        insertBlockBtn.setToolTipText("Insert a new empty block after the current block");
+        insertBlockBtn.addActionListener(e -> handleInsertBlock());
+
+        deleteBlockBtn = new JButton("- Block");
+        deleteBlockBtn.setEnabled(false);
+        deleteBlockBtn.setToolTipText("Delete the current block");
+        deleteBlockBtn.addActionListener(e -> handleDeleteBlock());
 
         shareBtn = new JButton("🔗");
         shareBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14));
@@ -128,8 +136,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         shareBtn.addActionListener(e -> {
             if (ViewerMode.isViewer()) return;
             if (currentDocId != null) {
-                // Pass the HTTP base so ShareManager uses the correct server address
-                ShareManager.showShareDialog(this, currentDocId, HTTP_BASE);
+                ShareManager.showShareDialog(this, currentDocId, getHttpBase());
             }
         });
 
@@ -151,12 +158,14 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             }
         });
 
-        // ELHEBEISHY'S PART
         toolbar.add(undoBtn);
         toolbar.add(redoBtn);
         toolbar.add(new JToolBar.Separator());
         toolbar.add(boldBtn);
         toolbar.add(italicBtn);
+        toolbar.add(new JToolBar.Separator());
+        toolbar.add(insertBlockBtn);
+        toolbar.add(deleteBlockBtn);
         toolbar.add(new JToolBar.Separator());
         toolbar.add(shareBtn);
         toolbar.add(new JToolBar.Separator());
@@ -167,7 +176,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         textPane = new JTextPane();
         textPane.setFont(new Font("Arial", Font.PLAIN, 16));
         textPane.setMargin(new Insets(12, 12, 12, 12));
-        // ELHEBEISHY'S PART
         textPane.setEditable(false);
         textPane.setEnabled(false);
 
@@ -206,8 +214,8 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
 
         synchronized (this) {
-            localDoc      = doc;
-            currentDocId  = docId;
+            localDoc       = doc;
+            currentDocId   = docId;
             currentBlockId = null;
         }
 
@@ -218,12 +226,12 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             connectBtn.setEnabled(true);
 
             textPane.setEnabled(false);
-            // ELHEBEISHY'S PART
             textPane.setEditable(false);
             boldBtn.setEnabled(false);
             italicBtn.setEnabled(false);
+            insertBlockBtn.setEnabled(false);
+            deleteBlockBtn.setEnabled(false);
             shareBtn.setEnabled(false);
-            // ELHEBEISHY'S PART
             updateUndoRedoButtons();
 
             statusLabel.setText("Document '" + docId + "' ready — click Connect");
@@ -248,6 +256,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     @Override
     public void onDeleteRequested() {
         if (NetworkManager.getInstance().isConnected()) {
+            NetworkManager.getInstance().sendRawMessage("{\"type\":\"document_deleted\"}");
             NetworkManager.getInstance().disconnect();
         }
 
@@ -265,12 +274,12 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             connectBtn.setEnabled(true);
 
             textPane.setEnabled(false);
-            // ELHEBEISHY'S PART
             textPane.setEditable(false);
             boldBtn.setEnabled(false);
             italicBtn.setEnabled(false);
+            insertBlockBtn.setEnabled(false);
+            deleteBlockBtn.setEnabled(false);
             shareBtn.setEnabled(false);
-            // ELHEBEISHY'S PART
             updateUndoRedoButtons();
 
             statusLabel.setText("Document deleted — create or connect to a new one");
@@ -304,30 +313,26 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     }
 
     private void handleJoinByCode() {
-        JoinDialog.JoinResult result = JoinDialog.show(this);
+        JoinDialog.JoinResult result = JoinDialog.show(this, getHttpBase());
         if (result == null) return;
 
         ViewerMode.setRole(result.role());
-
         docIdField.setText(result.docId());
-
         applyRoleToUI();
-
         handleConnect();
     }
 
     private void applyRoleToUI() {
         boolean viewer = ViewerMode.isViewer();
-
-        // ELHEBEISHY'S PART
         boolean canEdit = !viewer && NetworkManager.getInstance().isConnected();
+
         textPane.setEnabled(true);
         textPane.setEditable(canEdit);
-
         boldBtn.setEnabled(canEdit);
         italicBtn.setEnabled(canEdit);
+        insertBlockBtn.setEnabled(canEdit);
+        deleteBlockBtn.setEnabled(canEdit && localDoc.getBlockCount() > 1);
 
-        // Share button: visible and enabled only for editors, but only once connected
         shareBtn.setVisible(!viewer);
         shareBtn.setEnabled(!viewer && NetworkManager.getInstance().isConnected());
 
@@ -335,15 +340,40 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         viewerBtn.setText(ViewerMode.label());
         viewerBtn.setEnabled(false);
 
-        // ELHEBEISHY'S PART
         updateUndoRedoButtons();
     }
 
-    // ELHEBEISHY'S PART
     private void updateUndoRedoButtons() {
         boolean canUseHistory = !ViewerMode.isViewer() && NetworkManager.getInstance().isConnected();
         if (undoBtn != null) undoBtn.setEnabled(canUseHistory && undoManager.canUndo());
         if (redoBtn != null) redoBtn.setEnabled(canUseHistory && undoManager.canRedo());
+    }
+
+    private void updateBlockButtons() {
+        boolean canEdit = !ViewerMode.isViewer() && NetworkManager.getInstance().isConnected();
+        if (insertBlockBtn != null) insertBlockBtn.setEnabled(canEdit);
+        if (deleteBlockBtn != null) deleteBlockBtn.setEnabled(canEdit && localDoc.getBlockCount() > 1);
+    }
+
+    private String getServerHost() {
+        if (serverHostField == null) return DEFAULT_SERVER_HOST;
+        String host = serverHostField.getText().trim();
+        if (host.isEmpty()) return DEFAULT_SERVER_HOST;
+        host = host.replaceFirst("(?i)^(https?://|wss?://)", "");
+        int slash = host.indexOf('/');
+        if (slash >= 0) host = host.substring(0, slash);
+        if (host.endsWith(":" + SERVER_PORT)) {
+            host = host.substring(0, host.length() - (":" + SERVER_PORT).length());
+        }
+        return host.isBlank() ? DEFAULT_SERVER_HOST : host;
+    }
+
+    private String getHttpBase() {
+        return "http://" + getServerHost() + ":" + SERVER_PORT;
+    }
+
+    private String getWsBase() {
+        return "ws://" + getServerHost() + ":" + SERVER_PORT;
     }
 
     private void handleConnect() {
@@ -360,7 +390,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
 
         fileToolbar.updateSiteId(siteId);
-
         currentDocId = docId;
         updateWindowTitle();
 
@@ -372,7 +401,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         applier.setOnCursorUpdate((remoteSiteId, position) ->
                 SwingUtilities.invokeLater(() -> {
                     remoteCursors.put(remoteSiteId, position);
-                    // ELHEBEISHY'S PART
                     try {
                         drawRemoteCursors(textPane.getStyledDocument());
                     } catch (BadLocationException ex) {
@@ -391,7 +419,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             updateUsersLabel();
         }));
 
-        // ELHEBEISHY'S PART
         applier.setOnFullSyncApplied(() -> SwingUtilities.invokeLater(() -> {
             NetworkManager.getInstance().syncCountersFrom(localDoc);
             ensureEditorHasWritableBlock();
@@ -418,20 +445,16 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             statusLabel.setText("Connected — " + docId + "  (site " + siteId + ")" + roleLabel);
             statusLabel.setForeground(new Color(0, 130, 0));
 
-            // ── Enable share button here, after confirmed connection ──────
             if (!ViewerMode.isViewer()) {
                 shareBtn.setVisible(true);
                 shareBtn.setEnabled(true);
             }
 
             applyRoleToUI();
-            // ELHEBEISHY'S PART
             ensureEditorHasWritableBlock();
-            // ELHEBEISHY'S PART
             NetworkManager.getInstance().syncCountersFrom(localDoc);
 
             viewerBtn.setEnabled(false);
-
             connectBtn.setEnabled(false);
             docIdField.setEnabled(false);
             siteIdField.setEnabled(false);
@@ -443,25 +466,61 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             statusLabel.setText("Disconnected");
             statusLabel.setForeground(Color.RED);
             textPane.setEnabled(false);
-            // ELHEBEISHY'S PART
             textPane.setEditable(false);
             boldBtn.setEnabled(false);
             italicBtn.setEnabled(false);
+            insertBlockBtn.setEnabled(false);
+            deleteBlockBtn.setEnabled(false);
             shareBtn.setEnabled(false);
             viewerBtn.setEnabled(false);
-            // ELHEBEISHY'S PART
             updateUndoRedoButtons();
         }));
 
+        applier.setOnDocumentDeleted(() -> SwingUtilities.invokeLater(() -> {
+            JOptionPane.showMessageDialog(this,
+                    "This document was deleted by another user.",
+                    "Document Deleted", JOptionPane.WARNING_MESSAGE);
+            handleDocumentDeleted();
+        }));
+
         String role = ViewerMode.isViewer() ? "VIEWER" : "EDITOR";
-        // ── Use WS_BASE (port 8080) instead of hardcoded 8081 ─────────────
-        NetworkManager.getInstance().connect(WS_BASE, docId, siteId, applier, role);
+        NetworkManager.getInstance().connect(getWsBase(), docId, siteId, applier, role);
 
         statusLabel.setText("Connecting...");
         statusLabel.setForeground(Color.ORANGE);
     }
 
-    // ELHEBEISHY'S PART
+    private void handleDocumentDeleted() {
+        if (NetworkManager.getInstance().isConnected()) {
+            NetworkManager.getInstance().disconnect();
+        }
+        synchronized (this) {
+            localDoc       = new BlockCRDT();
+            currentDocId   = null;
+            currentBlockId = null;
+        }
+        remoteCursors.clear();
+
+        docIdField.setText("myDoc");
+        docIdField.setEnabled(true);
+        siteIdField.setEnabled(true);
+        connectBtn.setEnabled(true);
+
+        textPane.setEnabled(false);
+        textPane.setEditable(false);
+        boldBtn.setEnabled(false);
+        italicBtn.setEnabled(false);
+        insertBlockBtn.setEnabled(false);
+        deleteBlockBtn.setEnabled(false);
+        shareBtn.setEnabled(false);
+        updateUndoRedoButtons();
+
+        statusLabel.setText("Document was deleted by another user");
+        statusLabel.setForeground(Color.RED);
+        updateWindowTitle();
+        refreshDisplay();
+    }
+
     private void ensureEditorHasWritableBlock() {
         if (ViewerMode.isViewer() || !NetworkManager.getInstance().isConnected()) return;
 
@@ -473,8 +532,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                     return;
                 }
             }
-
-            // ELHEBEISHY'S PART
             blockToSend = currentBlockId != null
                     ? currentBlockId
                     : NetworkManager.getInstance().generateBlockID();
@@ -507,7 +564,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                     case KeyEvent.VK_ENTER      -> { e.consume(); handleEnter(); }
                     case KeyEvent.VK_DELETE     -> { e.consume(); handleDeleteForward(); }
                     case KeyEvent.VK_Z -> {
-                        // ELHEBEISHY'S PART
                         if (e.isControlDown() && e.isShiftDown()) { e.consume(); handleRedo(); }
                         else if (e.isControlDown()) { e.consume(); handleUndo(); }
                     }
@@ -518,7 +574,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                         if (e.isControlDown()) { e.consume(); handlePaste(); }
                     }
                     case KeyEvent.VK_X -> {
-                        // ELHEBEISHY'S PART
                         if (e.isControlDown()) { e.consume(); handleCut(); }
                     }
                 }
@@ -530,7 +585,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         textPane.addCaretListener(e -> {
             if (!isUpdating && NetworkManager.getInstance().isConnected()) {
                 sendCursorUpdate(e.getDot());
-                // ELHEBEISHY'S PART
                 updateActiveFormattingFromCaret();
             }
         });
@@ -539,10 +593,8 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     private void handleUndo() {
         if (ViewerMode.isViewer()) return;
         if (!NetworkManager.getInstance().isConnected()) return;
-        // ELHEBEISHY'S PART
         java.util.List<String> inverseOps = undoManager.undoOperations();
         if (inverseOps.isEmpty()) {
-            // ELHEBEISHY'S PART
             setEditorCaretAndFocus(textPane.getCaretPosition());
             updateUndoRedoButtons();
             return;
@@ -553,10 +605,8 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     private void handleRedo() {
         if (ViewerMode.isViewer()) return;
         if (!NetworkManager.getInstance().isConnected()) return;
-        // ELHEBEISHY'S PART
         java.util.List<String> originalOps = undoManager.redoOperations();
         if (originalOps.isEmpty()) {
-            // ELHEBEISHY'S PART
             setEditorCaretAndFocus(textPane.getCaretPosition());
             updateUndoRedoButtons();
             return;
@@ -564,13 +614,10 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         applyAndSendOperations(originalOps, "Redo");
     }
 
-    // ELHEBEISHY'S PART
     private void applyAndSendOperations(java.util.List<String> operations, String label) {
         try {
-            // ELHEBEISHY'S PART
             int caretAfterInsert = -1;
             for (String json : operations) {
-                // ELHEBEISHY'S PART
                 org.json.JSONObject op = new org.json.JSONObject(json);
                 applyLocalOp(op);
                 NetworkManager.getInstance().sendRawMessage(json);
@@ -579,20 +626,17 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                 }
             }
             refreshDisplay();
-            // ELHEBEISHY'S PART
             if (caretAfterInsert >= 0) {
                 setEditorCaretAndFocus(caretAfterInsert);
             } else {
                 setEditorCaretAndFocus(textPane.getCaretPosition());
             }
-            // ELHEBEISHY'S PART
             updateUndoRedoButtons();
         } catch (Exception ex) {
             System.err.println("[" + label + "] " + ex.getMessage());
         }
     }
 
-    // ELHEBEISHY'S PART
     private int findCaretAfterInsertedChar(org.json.JSONObject op) {
         CharID target = new CharID(
                 op.getJSONObject("charId").getInt("siteId"),
@@ -614,7 +658,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         return -1;
     }
 
-    // ELHEBEISHY'S PART
     private void handleCut() {
         if (ViewerMode.isViewer()) return;
         if (!NetworkManager.getInstance().isConnected()) return;
@@ -630,7 +673,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                 System.err.println("[Cut] Clipboard update failed: " + ex.getMessage());
             }
         }
-
         handleSelectedRangeDelete();
     }
 
@@ -660,7 +702,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                     if (b == null) return;
                     CharID cid = new CharID(j.getJSONObject("charId").getInt("siteId"), j.getJSONObject("charId").getInt("myNum"));
                     CharID pid = j.isNull("parentId") ? null : new CharID(j.getJSONObject("parentId").getInt("siteId"), j.getJSONObject("parentId").getInt("myNum"));
-                    // ELHEBEISHY'S PART
                     CharNode node = new CharNode(cid, pid, j.getString("char").charAt(0));
                     node.setBold(j.optBoolean("bold", false));
                     node.setItalic(j.optBoolean("italic", false));
@@ -676,7 +717,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                 case "insert_block" -> {
                     BlockID bid = new BlockID(j.getJSONObject("blockId").getInt("siteId"), j.getJSONObject("blockId").getInt("counter"));
                     BlockID par = j.isNull("parentBlockId") ? null : new BlockID(j.getJSONObject("parentBlockId").getInt("siteId"), j.getJSONObject("parentBlockId").getInt("counter"));
-                    // ELHEBEISHY'S PART
                     localDoc.addBlock(new Block(bid, par));
                 }
                 case "delete_block" -> {
@@ -684,14 +724,12 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                     localDoc.deleteBlock(bid);
                 }
                 case "split_block" -> {
-                    // ELHEBEISHY'S PART
                     BlockID target = blockIdFromJson(j.getJSONObject("targetBlockId"));
                     BlockID newBlock = blockIdFromJson(j.getJSONObject("newBlockId"));
                     localDoc.splitBlock(target, j.getInt("splitIndex"), newBlock);
                     currentBlockId = newBlock;
                 }
                 case "merge_blocks" -> {
-                    // ELHEBEISHY'S PART
                     BlockID first = blockIdFromJson(j.getJSONObject("firstBlockId"));
                     BlockID second = blockIdFromJson(j.getJSONObject("secondBlockId"));
                     localDoc.mergeBlocks(first, second);
@@ -708,7 +746,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
     }
 
-    // ELHEBEISHY'S PART
     private BlockID blockIdFromJson(org.json.JSONObject json) {
         return new BlockID(json.getInt("siteId"), json.getInt("counter"));
     }
@@ -718,7 +755,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         return localDoc.findBlock(new BlockID(Integer.parseInt(p[0]), Integer.parseInt(p[1])));
     }
 
-    // ELHEBEISHY'S PART
     private static final class SelectedDeleteResult {
         private final int start;
         private final java.util.List<String> deleteOps;
@@ -731,34 +767,28 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
     }
 
-    // ELHEBEISHY'S PART
     private boolean hasSelection() {
         return textPane.getSelectionStart() != textPane.getSelectionEnd();
     }
 
-    // ELHEBEISHY'S PART
     private void handleSelectedRangeDelete() {
-        // ELHEBEISHY'S PART
         SelectedDeleteResult deletion = deleteSelectedRangeFromDocument();
         if (deletion == null) return;
 
-        // ELHEBEISHY'S PART
         sendRawOperations(deletion.deleteOps);
         undoManager.recordGroup(deletion.deleteOps, deletion.restoreOps);
         updateUndoRedoButtons();
 
         refreshDisplay();
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(deletion.start);
     }
 
-    // ELHEBEISHY'S PART
     private SelectedDeleteResult deleteSelectedRangeFromDocument() {
         int start = Math.min(textPane.getSelectionStart(), textPane.getSelectionEnd());
-        int end = Math.max(textPane.getSelectionStart(), textPane.getSelectionEnd());
+        int end   = Math.max(textPane.getSelectionStart(), textPane.getSelectionEnd());
         if (start == end) return null;
 
-        java.util.List<String> deleteOps = new ArrayList<>();
+        java.util.List<String> deleteOps  = new ArrayList<>();
         java.util.List<String> restoreOps = new ArrayList<>();
 
         synchronized (localDoc) {
@@ -787,26 +817,22 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         return new SelectedDeleteResult(start, deleteOps, restoreOps);
     }
 
-    // ELHEBEISHY'S PART
     private void sendRawOperations(java.util.List<String> operations) {
         for (String operation : operations) {
             NetworkManager.getInstance().sendRawMessage(operation);
         }
     }
 
-    // ELHEBEISHY'S PART
     private void handleReplaceSelectionWithChar(char ch) {
         SelectedDeleteResult deletion = deleteSelectedRangeFromDocument();
         if (deletion == null) return;
 
-        // ELHEBEISHY'S PART
-        boolean keepBold = activeBold;
+        boolean keepBold   = activeBold;
         boolean keepItalic = activeItalic;
 
         sendRawOperations(deletion.deleteOps);
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(deletion.start);
-        activeBold = keepBold;
+        activeBold   = keepBold;
         activeItalic = keepItalic;
         updateFormattingButtons();
 
@@ -815,7 +841,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             undoManager.recordGroup(deletion.deleteOps, deletion.restoreOps);
             updateUndoRedoButtons();
             refreshDisplay();
-            // ELHEBEISHY'S PART
             setEditorCaretAndFocus(deletion.start);
             return;
         }
@@ -834,17 +859,14 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     private void handleInsertChar(char ch) {
         if (ViewerMode.isViewer()) return;
 
-        // ELHEBEISHY'S PART
         if (hasSelection()) {
             handleReplaceSelectionWithChar(ch);
             return;
         }
 
-        // ELHEBEISHY'S PART
         insertCharAtCaret(ch, true);
     }
 
-    // ELHEBEISHY'S PART
     private String[] insertCharAtCaret(char ch, boolean recordHistory) {
         int caretPos = textPane.getCaretPosition();
         Object[] blockAndIndex = findBlockAtCaret(caretPos);
@@ -859,32 +881,27 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         CharID newCharId  = NetworkManager.getInstance().generateCharID();
         String blockIdStr = NetworkManager.getInstance().blockIdToString(block.getMyId());
 
-        // ELHEBEISHY'S PART
-        boolean insertBold = activeBold;
+        boolean insertBold   = activeBold;
         boolean insertItalic = activeItalic;
 
         synchronized (localDoc) {
             CharNode newNode = new CharNode(newCharId, parentId, ch);
-            // ELHEBEISHY'S PART
             newNode.setBold(insertBold);
             newNode.setItalic(insertItalic);
             block.getContent().addChar(newNode);
         }
 
-        // ELHEBEISHY'S PART
         String orig = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.insertChar(
                 blockIdStr, newCharId, parentId, ch, insertBold, insertItalic);
         String undo = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.deleteChar(blockIdStr, newCharId);
         NetworkManager.getInstance().sendRawMessage(orig);
 
         if (recordHistory) {
-            // ELHEBEISHY'S PART
             undoManager.record(orig, undo);
             updateUndoRedoButtons();
         }
 
         refreshDisplay();
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(caretPos + 1);
         return new String[]{orig, undo};
     }
@@ -892,7 +909,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     private void handleBackspace() {
         if (ViewerMode.isViewer()) return;
 
-        // ELHEBEISHY'S PART
         if (hasSelection()) {
             handleSelectedRangeDelete();
             return;
@@ -915,34 +931,28 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         CharNode toDelete = getNodeAtVisiblePos(block, localIndex - 1);
         if (toDelete == null) return;
 
-        char savedChar = toDelete.getMyChar();
-        CharID savedParent = toDelete.getParentId();
-        // ELHEBEISHY'S PART
-        boolean savedBold = toDelete.checkBold();
+        char    savedChar   = toDelete.getMyChar();
+        CharID  savedParent = toDelete.getParentId();
+        boolean savedBold   = toDelete.checkBold();
         boolean savedItalic = toDelete.checkItalic();
 
         String blockIdStr = NetworkManager.getInstance().blockIdToString(block.getMyId());
-
         synchronized (localDoc) { toDelete.markDeleted(); }
         NetworkManager.getInstance().sendDeleteChar(blockIdStr, toDelete.getMyId());
 
         String del = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.deleteChar(blockIdStr, toDelete.getMyId());
-        // ELHEBEISHY'S PART
         String ins = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.insertChar(
                 blockIdStr, toDelete.getMyId(), savedParent, savedChar, savedBold, savedItalic);
         undoManager.record(del, ins);
-        // ELHEBEISHY'S PART
         updateUndoRedoButtons();
 
         refreshDisplay();
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(caretPos - 1);
     }
 
     private void handleDeleteForward() {
         if (ViewerMode.isViewer()) return;
 
-        // ELHEBEISHY'S PART
         if (hasSelection()) {
             handleSelectedRangeDelete();
             return;
@@ -964,34 +974,29 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         CharNode toDelete = getNodeAtVisiblePos(block, localIndex);
         if (toDelete == null) return;
 
-        // ELHEBEISHY'S PART
-        char savedChar = toDelete.getMyChar();
-        CharID savedParent = toDelete.getParentId();
-        boolean savedBold = toDelete.checkBold();
+        char    savedChar   = toDelete.getMyChar();
+        CharID  savedParent = toDelete.getParentId();
+        boolean savedBold   = toDelete.checkBold();
         boolean savedItalic = toDelete.checkItalic();
 
         String blockIdStr = NetworkManager.getInstance().blockIdToString(block.getMyId());
         synchronized (localDoc) { toDelete.markDeleted(); }
         NetworkManager.getInstance().sendDeleteChar(blockIdStr, toDelete.getMyId());
 
-        // ELHEBEISHY'S PART
         String del = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.deleteChar(blockIdStr, toDelete.getMyId());
         String ins = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.insertChar(
                 blockIdStr, toDelete.getMyId(), savedParent, savedChar, savedBold, savedItalic);
         undoManager.record(del, ins);
-        // ELHEBEISHY'S PART
         updateUndoRedoButtons();
 
         refreshDisplay();
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(caretPos);
     }
 
     private void handleEnter() {
         if (ViewerMode.isViewer()) return;
 
-        // ELHEBEISHY'S PART
-        boolean keepBold = activeBold;
+        boolean keepBold   = activeBold;
         boolean keepItalic = activeItalic;
 
         int caretPos = textPane.getCaretPosition();
@@ -1003,7 +1008,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         int   blockLen   = block.getContent().getLength();
 
         BlockID newBlockId = NetworkManager.getInstance().generateBlockID();
-        // ELHEBEISHY'S PART
         String originalOp;
         String inverseOp;
 
@@ -1013,31 +1017,114 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                 localDoc.addBlock(newBlock);
                 currentBlockId = newBlockId;
             }
-            // ELHEBEISHY'S PART
             originalOp = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.insertBlock(newBlockId, block.getMyId());
-            inverseOp = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.deleteBlock(newBlockId);
+            inverseOp  = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.deleteBlock(newBlockId);
         } else {
             synchronized (localDoc) {
                 localDoc.splitBlock(block.getMyId(), localIndex, newBlockId);
                 currentBlockId = newBlockId;
             }
-            // ELHEBEISHY'S PART
             originalOp = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.splitBlock(block.getMyId(), localIndex, newBlockId);
-            inverseOp = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.mergeBlocks(block.getMyId(), newBlockId);
+            inverseOp  = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.mergeBlocks(block.getMyId(), newBlockId);
         }
 
-        // ELHEBEISHY'S PART
         NetworkManager.getInstance().sendRawMessage(originalOp);
         undoManager.record(originalOp, inverseOp);
         updateUndoRedoButtons();
 
         refreshDisplay();
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(caretPos + 1);
-        // ELHEBEISHY'S PART
-        activeBold = keepBold;
+        activeBold   = keepBold;
         activeItalic = keepItalic;
         updateFormattingButtons();
+    }
+
+    private void handleInsertBlock() {
+        if (ViewerMode.isViewer()) return;
+        if (!NetworkManager.getInstance().isConnected()) return;
+
+        int caretPos = textPane.getCaretPosition();
+        Object[] blockAndIndex = findBlockAtCaret(caretPos);
+        Block currentBlock = null;
+        if (blockAndIndex != null) {
+            currentBlock = (Block) blockAndIndex[0];
+        } else if (currentBlockId != null) {
+            currentBlock = localDoc.findBlock(currentBlockId);
+        }
+        if (currentBlock == null) return;
+
+        BlockID newBlockId = NetworkManager.getInstance().generateBlockID();
+        BlockID parentId   = currentBlock.getMyId();
+
+        synchronized (localDoc) {
+            localDoc.addBlock(new Block(newBlockId, parentId));
+            currentBlockId = newBlockId;
+        }
+
+        NetworkManager.getInstance().sendInsertBlock(newBlockId, parentId);
+        refreshDisplay();
+
+        int newCaret = 0;
+        for (Block b : localDoc.allBlocks) {
+            if (b.checkDeleted()) continue;
+            if (b.getMyId().isSameAs(newBlockId)) break;
+            newCaret += b.getContent().getLength() + 1;
+        }
+        setEditorCaretAndFocus(newCaret);
+    }
+
+    private void handleDeleteBlock() {
+        if (ViewerMode.isViewer()) return;
+        if (!NetworkManager.getInstance().isConnected()) return;
+        if (localDoc.getBlockCount() <= 1) return;
+
+        int caretPos = textPane.getCaretPosition();
+        Object[] blockAndIndex = findBlockAtCaret(caretPos);
+        Block blockToDelete = null;
+        if (blockAndIndex != null) {
+            blockToDelete = (Block) blockAndIndex[0];
+        } else if (currentBlockId != null) {
+            blockToDelete = localDoc.findBlock(currentBlockId);
+        }
+        if (blockToDelete == null) return;
+
+        BlockID targetId = blockToDelete.getMyId();
+
+        Block prevBlock = null;
+        Block nextBlock = null;
+        boolean foundTarget = false;
+        for (Block b : localDoc.allBlocks) {
+            if (b.checkDeleted()) continue;
+            if (b.getMyId().isSameAs(targetId)) {
+                foundTarget = true;
+                continue;
+            }
+            if (!foundTarget) prevBlock = b;
+            else if (nextBlock == null) nextBlock = b;
+        }
+
+        Block newCurrentBlock = (prevBlock != null) ? prevBlock : nextBlock;
+
+        synchronized (localDoc) {
+            localDoc.deleteBlock(targetId);
+            currentBlockId = (newCurrentBlock != null) ? newCurrentBlock.getMyId() : null;
+        }
+
+        NetworkManager.getInstance().sendDeleteBlock(targetId);
+        refreshDisplay();
+
+        if (newCurrentBlock != null) {
+            int newCaret = 0;
+            for (Block b : localDoc.allBlocks) {
+                if (b.checkDeleted()) continue;
+                if (b.getMyId().isSameAs(newCurrentBlock.getMyId())) {
+                    newCaret += b.getContent().getLength();
+                    break;
+                }
+                newCaret += b.getContent().getLength() + 1;
+            }
+            setEditorCaretAndFocus(newCaret);
+        }
     }
 
     private void handleMergeWithPrevious(Block block) {
@@ -1058,7 +1145,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
         NetworkManager.getInstance().sendMergeBlocks(prevBlock.getMyId(), block.getMyId());
         refreshDisplay();
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(caretPos - 1);
     }
 
@@ -1079,7 +1165,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
         NetworkManager.getInstance().sendMergeBlocks(block.getMyId(), nextBlock.getMyId());
         refreshDisplay();
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(caretPos);
     }
 
@@ -1089,16 +1174,13 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         int start = textPane.getSelectionStart();
         int end   = textPane.getSelectionEnd();
         if (start == end) {
-            // ELHEBEISHY'S PART
             toggleActiveFormatting(formatType);
             return;
         }
 
-        // ELHEBEISHY'S PART
         boolean targetValue = getSelectionFormattingTarget(formatType, start, end);
-        // ELHEBEISHY'S PART
         java.util.List<String> originalOps = new ArrayList<>();
-        java.util.List<String> inverseOps = new ArrayList<>();
+        java.util.List<String> inverseOps  = new ArrayList<>();
 
         int offset = 0;
         for (Block block : localDoc.allBlocks) {
@@ -1108,7 +1190,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             for (CharNode node : block.getContent().allNodes) {
                 if (node.checkDeleted()) continue;
                 if (offset >= start && offset < end) {
-                    // ELHEBEISHY'S PART
                     boolean newValue = targetValue;
                     boolean oldValue = nodeHasFormatting(node, formatType);
                     String formatOp = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.formatting(
@@ -1126,19 +1207,15 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             }
             offset++;
         }
-        // ELHEBEISHY'S PART
         if (!originalOps.isEmpty()) {
             undoManager.recordGroup(originalOps, inverseOps);
             updateUndoRedoButtons();
         }
         refreshDisplay();
-        // ELHEBEISHY'S PART
         setEditorCaretAndFocus(end);
-        // ELHEBEISHY'S PART
         updateActiveFormattingFromCaret();
     }
 
-    // ELHEBEISHY'S PART
     private boolean getSelectionFormattingTarget(String formatType, int start, int end) {
         boolean sawSelectedNode = false;
         boolean allSelectedAlreadyFormatted = true;
@@ -1160,16 +1237,13 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                 offset++;
             }
         }
-
         return !sawSelectedNode || !allSelectedAlreadyFormatted;
     }
 
-    // ELHEBEISHY'S PART
     private boolean nodeHasFormatting(CharNode node, String formatType) {
         return "bold".equals(formatType) ? node.checkBold() : node.checkItalic();
     }
 
-    // ELHEBEISHY'S PART
     private void toggleActiveFormatting(String formatType) {
         if ("bold".equals(formatType)) {
             activeBold = !activeBold;
@@ -1178,34 +1252,29 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
         updateFormattingButtons();
         textPane.requestFocusInWindow();
-        // ELHEBEISHY'S PART
-        boolean keepBold = activeBold;
+        boolean keepBold   = activeBold;
         boolean keepItalic = activeItalic;
         SwingUtilities.invokeLater(() -> {
-            activeBold = keepBold;
+            activeBold   = keepBold;
             activeItalic = keepItalic;
             updateFormattingButtons();
             textPane.requestFocusInWindow();
         });
     }
 
-    // ELHEBEISHY'S PART
     private void updateActiveFormattingFromCaret() {
         if (hasSelection()) return;
-
         CharNode previous = getVisibleNodeBeforeCaret(textPane.getCaretPosition());
-        activeBold = previous != null && previous.checkBold();
+        activeBold   = previous != null && previous.checkBold();
         activeItalic = previous != null && previous.checkItalic();
         updateFormattingButtons();
     }
 
-    // ELHEBEISHY'S PART
     private void updateFormattingButtons() {
-        if (boldBtn != null) boldBtn.setSelected(activeBold);
+        if (boldBtn != null)   boldBtn.setSelected(activeBold);
         if (italicBtn != null) italicBtn.setSelected(activeItalic);
     }
 
-    // ELHEBEISHY'S PART
     private void setEditorCaretAndFocus(int position) {
         int safePosition = Math.max(0, Math.min(position, getDocumentLength()));
         textPane.setCaretPosition(safePosition);
@@ -1246,22 +1315,20 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         } catch (BadLocationException e) {
             System.err.println("[EditorWindow] Display refresh error: " + e.getMessage());
         } finally {
-            // ELHEBEISHY'S PART
             int docLen = textPane.getDocument().getLength();
             textPane.setCaretPosition(Math.min(savedCaret, docLen));
             isUpdating = false;
         }
+        updateBlockButtons();
     }
 
     private void drawRemoteCursors(StyledDocument doc) throws BadLocationException {
-        // ELHEBEISHY'S PART
         Highlighter highlighter = textPane.getHighlighter();
         for (Object tag : remoteCursorHighlights.values()) {
             highlighter.removeHighlight(tag);
         }
         remoteCursorHighlights.clear();
 
-        // ELHEBEISHY'S PART
         int docLen = doc.getLength();
         if (docLen == 0) return;
 
@@ -1274,13 +1341,12 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             if (position < 0)     position = 0;
 
             Color color = USER_COLORS[remoteSiteId % USER_COLORS.length];
-            // ELHEBEISHY'S PART
             int start = Math.min(position, docLen - 1);
-            int end = Math.min(start + 1, docLen);
+            int end   = Math.min(start + 1, docLen);
             Object tag = highlighter.addHighlight(
-                    start,
-                    end,
-                    new DefaultHighlighter.DefaultHighlightPainter(new Color(color.getRed(), color.getGreen(), color.getBlue(), 90)));
+                    start, end,
+                    new DefaultHighlighter.DefaultHighlightPainter(
+                            new Color(color.getRed(), color.getGreen(), color.getBlue(), 90)));
             remoteCursorHighlights.put(remoteSiteId, tag);
         }
     }
@@ -1288,7 +1354,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     private void sendCursorUpdate(int caretPos) {
         if (!NetworkManager.getInstance().isConnected()) return;
         try {
-            // ELHEBEISHY'S PART
             int safeCaret = Math.max(0, Math.min(caretPos, getDocumentLength()));
             NetworkManager.getInstance().sendCursorUpdate(siteId, safeCaret);
         } catch (Exception e) {
@@ -1315,13 +1380,11 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         return null;
     }
 
-    // ELHEBEISHY'S PART
     private CharNode getVisibleNodeBeforeCaret(int caretPos) {
         Object[] blockAndIndex = findBlockAtCaret(caretPos);
         if (blockAndIndex == null) return null;
-
-        Block block = (Block) blockAndIndex[0];
-        int localIndex = (Integer) blockAndIndex[1];
+        Block block      = (Block) blockAndIndex[0];
+        int   localIndex = (Integer) blockAndIndex[1];
         if (localIndex <= 0) return null;
         return getNodeAtVisiblePos(block, localIndex - 1);
     }

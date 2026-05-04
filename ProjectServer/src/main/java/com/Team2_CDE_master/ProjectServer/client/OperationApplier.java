@@ -12,37 +12,28 @@ public class OperationApplier implements OperationListener {
     private final BlockCRDT localDoc;
 
     private Runnable onDocumentChanged;
-
     private Runnable onConnected;
-
     private Runnable onDisconnected;
-
     private BiConsumer<Integer, Integer> onCursorUpdate;
-
     private BiConsumer<Integer, String> onPresenceJoin;
-
     private Consumer<Integer> onPresenceLeave;
-
-    // ELHEBEISHY'S PART
     private Runnable onFullSyncApplied;
-
-    // ELHEBEISHY'S PART
     private Consumer<String> onErrorMessage;
+    private Runnable onDocumentDeleted;
 
     public OperationApplier(BlockCRDT localDoc) {
         this.localDoc = localDoc;
     }
 
-    public void setOnDocumentChanged(Runnable r)              { this.onDocumentChanged = r; }
-    public void setOnConnected(Runnable r)                    { this.onConnected = r; }
-    public void setOnDisconnected(Runnable r)                 { this.onDisconnected = r; }
+    public void setOnDocumentChanged(Runnable r)                  { this.onDocumentChanged = r; }
+    public void setOnConnected(Runnable r)                        { this.onConnected = r; }
+    public void setOnDisconnected(Runnable r)                     { this.onDisconnected = r; }
     public void setOnCursorUpdate(BiConsumer<Integer, Integer> c) { this.onCursorUpdate = c; }
-    public void setOnPresenceJoin(BiConsumer<Integer, String> c) { this.onPresenceJoin = c; }
-    public void setOnPresenceLeave(Consumer<Integer> c) { this.onPresenceLeave = c; }
-    // ELHEBEISHY'S PART
-    public void setOnFullSyncApplied(Runnable r) { this.onFullSyncApplied = r; }
-    // ELHEBEISHY'S PART
-    public void setOnErrorMessage(Consumer<String> c) { this.onErrorMessage = c; }
+    public void setOnPresenceJoin(BiConsumer<Integer, String> c)  { this.onPresenceJoin = c; }
+    public void setOnPresenceLeave(Consumer<Integer> c)           { this.onPresenceLeave = c; }
+    public void setOnFullSyncApplied(Runnable r)                  { this.onFullSyncApplied = r; }
+    public void setOnErrorMessage(Consumer<String> c)             { this.onErrorMessage = c; }
+    public void setOnDocumentDeleted(Runnable r)                  { this.onDocumentDeleted = r; }
 
     @Override
     public void onConnected() {
@@ -57,7 +48,6 @@ public class OperationApplier implements OperationListener {
     @Override
     public void onError(String errorMessage) {
         System.err.println("[OperationApplier] Error: " + errorMessage);
-        // ELHEBEISHY'S PART
         if (onErrorMessage != null) onErrorMessage.accept(errorMessage);
     }
 
@@ -85,11 +75,16 @@ public class OperationApplier implements OperationListener {
                 }
                 return;
             }
+
             if (type.equals("full_sync")) {
                 applyFullSync(json);
                 if (onDocumentChanged != null) onDocumentChanged.run();
-                // ELHEBEISHY'S PART
                 if (onFullSyncApplied != null) onFullSyncApplied.run();
+                return;
+            }
+
+            if (type.equals("document_deleted")) {
+                if (onDocumentDeleted != null) onDocumentDeleted.run();
                 return;
             }
 
@@ -103,7 +98,6 @@ public class OperationApplier implements OperationListener {
             System.err.println("[OperationApplier] Failed to apply op: " + e.getMessage());
         }
     }
-
 
     private void applyOp(String type, JSONObject json) {
         switch (type) {
@@ -125,7 +119,6 @@ public class OperationApplier implements OperationListener {
         CharID parentId = json.isNull("parentId") ? null : parseCharID(json.getJSONObject("parentId"));
         char ch = json.getString("char").charAt(0);
         Block block = findBlock(blockIdStr);
-        // ELHEBEISHY'S PART
         if (block != null) {
             CharNode node = new CharNode(charId, parentId, ch);
             node.setBold(json.optBoolean("bold", false));
@@ -165,7 +158,6 @@ public class OperationApplier implements OperationListener {
     private void applyInsertBlock(JSONObject json) {
         BlockID id     = parseBlockID(json.getJSONObject("blockId"));
         BlockID parent = json.isNull("parentBlockId") ? null : parseBlockID(json.getJSONObject("parentBlockId"));
-        // ELHEBEISHY'S PART
         localDoc.addBlock(new Block(id, parent));
     }
 
@@ -187,11 +179,11 @@ public class OperationApplier implements OperationListener {
             parseBlockID(json.getJSONObject("secondBlockId"))
         );
     }
+
     private void applyFullSync(org.json.JSONObject json) {
         org.json.JSONArray blocks = json.getJSONArray("blocks");
 
         synchronized (localDoc) {
-            // ELHEBEISHY'S PART
             localDoc.clear();
 
             for (int i = 0; i < blocks.length(); i++) {
@@ -206,7 +198,6 @@ public class OperationApplier implements OperationListener {
                                 blockJson.getJSONObject("parentId").getInt("siteId"),
                                 blockJson.getJSONObject("parentId").getInt("counter"));
 
-                // Only add the block if not already present
                 if (localDoc.findBlock(blockId) == null) {
                     localDoc.addBlock(new Block(blockId, parentId));
                 }
@@ -222,7 +213,6 @@ public class OperationApplier implements OperationListener {
                             charJson.getInt("siteId"),
                             charJson.getInt("myNum"));
 
-                    // Skip if already present
                     if (block.getContent().findNode(charId) != null) continue;
 
                     CharID charParent = charJson.isNull("parentId") ? null :

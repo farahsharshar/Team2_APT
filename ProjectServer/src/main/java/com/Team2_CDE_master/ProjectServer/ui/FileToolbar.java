@@ -4,6 +4,7 @@ import com.Team2_CDE_master.ProjectServer.crdt.BlockCRDT;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.function.Supplier;
 
 public class FileToolbar extends JPanel {
 
@@ -19,8 +20,8 @@ public class FileToolbar extends JPanel {
     private final FileManager fileManager;
     private FileToolbarListener toolbarListener;
 
-    public FileToolbar(Component parentComponent, int siteId) {
-        fileManager = new FileManager(parentComponent);
+    public FileToolbar(Component parentComponent, int siteId, Supplier<String> serverBaseSupplier) {
+        fileManager = new FileManager(parentComponent, serverBaseSupplier);
         fileManager.setSiteId(siteId);
 
         fileManager.setFileActionListener(new FileManager.FileActionListener() {
@@ -53,14 +54,14 @@ public class FileToolbar extends JPanel {
         setBorder(BorderFactory.createTitledBorder("File"));
 
         JButton newBtn    = new JButton("New");
-        JButton openBtn   = new JButton("Open");        // ← ADD THIS
+        JButton openBtn   = new JButton("Open");
         JButton importBtn = new JButton("Import .txt");
         JButton exportBtn = new JButton("Export .txt");
         JButton renameBtn = new JButton("Rename");
         JButton deleteBtn = new JButton("Delete");
 
         newBtn   .setToolTipText("Create a new empty document");
-        openBtn  .setToolTipText("Open a saved document from the server");   // ← ADD THIS
+        openBtn  .setToolTipText("Open a saved document from the server");
         importBtn.setToolTipText("Import a .txt file as a new document");
         exportBtn.setToolTipText("Export the current document to a .txt file");
         renameBtn.setToolTipText("Rename the current document");
@@ -68,7 +69,7 @@ public class FileToolbar extends JPanel {
 
         newBtn.addActionListener(e -> fileManager.createNewDocument());
 
-        openBtn.addActionListener(e -> fileManager.openDocument());          // ← ADD THIS
+        openBtn.addActionListener(e -> fileManager.openDocument());
 
         importBtn.addActionListener(e -> fileManager.importFile());
 
@@ -105,7 +106,7 @@ public class FileToolbar extends JPanel {
         });
 
         add(newBtn);
-        add(openBtn);       // ← ADD THIS
+        add(openBtn);
         add(importBtn);
         add(exportBtn);
         add(new JSeparator(SwingConstants.VERTICAL));
