@@ -57,11 +57,53 @@ public class DocumentController {
 
         DocumentSession.seed(id, doc);
 
+        org.json.JSONArray blocksJson = new org.json.JSONArray();
+        for (com.Team2_CDE_master.ProjectServer.crdt.Block block : doc.allBlocks) {
+            if (block.checkDeleted()) continue;
+
+            org.json.JSONObject blockJson = new org.json.JSONObject();
+            blockJson.put("siteId",  block.getMyId().siteId);
+            blockJson.put("counter", block.getMyId().counter);
+
+            if (block.getParentId() != null) {
+                org.json.JSONObject p = new org.json.JSONObject();
+                p.put("siteId",  block.getParentId().siteId);
+                p.put("counter", block.getParentId().counter);
+                blockJson.put("parentId", p);
+            } else {
+                blockJson.put("parentId", org.json.JSONObject.NULL);
+            }
+
+            org.json.JSONArray charsJson = new org.json.JSONArray();
+            for (com.Team2_CDE_master.ProjectServer.crdt.CharNode node : block.getContent().allNodes) {
+                org.json.JSONObject charJson = new org.json.JSONObject();
+                charJson.put("siteId",  node.getMyId().siteId);
+                charJson.put("myNum",   node.getMyId().myNum);
+
+                if (node.getParentId() != null) {
+                    org.json.JSONObject cp = new org.json.JSONObject();
+                    cp.put("siteId", node.getParentId().siteId);
+                    cp.put("myNum",  node.getParentId().myNum);
+                    charJson.put("parentId", cp);
+                } else {
+                    charJson.put("parentId", org.json.JSONObject.NULL);
+                }
+
+                charJson.put("char",    String.valueOf(node.getMyChar()));
+                charJson.put("deleted", node.checkDeleted());
+                charJson.put("bold",    node.checkBold());
+                charJson.put("italic",  node.checkItalic());
+                charsJson.put(charJson);
+            }
+            blockJson.put("chars", charsJson);
+            blocksJson.put(blockJson);
+        }
+
         Map<String, Object> response = new HashMap<>();
-        response.put("id", id);
+        response.put("id",         id);
         response.put("blockCount", doc.getBlockCount());
-        response.put("text", doc.getFullText());
-        response.put("status", "loaded");
+        response.put("status",     "loaded");
+        response.put("blocks",     blocksJson.toString());
         return ResponseEntity.ok(response);
     }
 

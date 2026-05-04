@@ -179,8 +179,8 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
 
         synchronized (this) {
-            localDoc      = doc;
-            currentDocId  = docId;
+            localDoc       = doc;
+            currentDocId   = docId;
             currentBlockId = null;
         }
 
@@ -190,19 +190,19 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             siteIdField.setEnabled(true);
             connectBtn.setEnabled(true);
 
-            textPane.setEnabled(false);
+            // ── Show content immediately so user can see what they're opening ──
+            textPane.setEnabled(false); // still read-only until connected
             boldBtn.setEnabled(false);
             italicBtn.setEnabled(false);
             shareBtn.setEnabled(false);
 
-            statusLabel.setText("Document '" + docId + "' ready — click Connect");
-            statusLabel.setForeground(new Color(0, 100, 200));
-
             updateWindowTitle();
-            refreshDisplay();
+            refreshDisplay(); // ← this now shows the loaded text right away
+
+            statusLabel.setText("Document '" + docId + "' loaded — click Connect to collaborate.");
+            statusLabel.setForeground(new Color(0, 100, 200));
         });
     }
-
     @Override
     public void onRenameRequested(String newName) {
         SwingUtilities.invokeLater(() -> {

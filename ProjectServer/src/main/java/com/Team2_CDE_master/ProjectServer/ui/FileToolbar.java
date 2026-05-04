@@ -53,18 +53,22 @@ public class FileToolbar extends JPanel {
         setBorder(BorderFactory.createTitledBorder("File"));
 
         JButton newBtn    = new JButton("New");
+        JButton openBtn   = new JButton("Open");        // ← ADD THIS
         JButton importBtn = new JButton("Import .txt");
         JButton exportBtn = new JButton("Export .txt");
         JButton renameBtn = new JButton("Rename");
         JButton deleteBtn = new JButton("Delete");
 
         newBtn   .setToolTipText("Create a new empty document");
+        openBtn  .setToolTipText("Open a saved document from the server");   // ← ADD THIS
         importBtn.setToolTipText("Import a .txt file as a new document");
         exportBtn.setToolTipText("Export the current document to a .txt file");
         renameBtn.setToolTipText("Rename the current document");
         deleteBtn.setToolTipText("Delete the current document permanently");
 
         newBtn.addActionListener(e -> fileManager.createNewDocument());
+
+        openBtn.addActionListener(e -> fileManager.openDocument());          // ← ADD THIS
 
         importBtn.addActionListener(e -> fileManager.importFile());
 
@@ -101,6 +105,7 @@ public class FileToolbar extends JPanel {
         });
 
         add(newBtn);
+        add(openBtn);       // ← ADD THIS
         add(importBtn);
         add(exportBtn);
         add(new JSeparator(SwingConstants.VERTICAL));
