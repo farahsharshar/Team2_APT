@@ -1,114 +1,169 @@
+// FULL EditorWindow = ORIGINAL LOGIC + UPDATED UI (NO LOGIC CHANGES)
+
 package com.Team2_CDE_master.ProjectServer.ui;
 
 import com.Team2_CDE_master.ProjectServer.client.OperationApplier;
 import com.Team2_CDE_master.ProjectServer.crdt.*;
 import com.Team2_CDE_master.ProjectServer.network.NetworkManager;
-import org.json.JSONObject;
 
 import javax.swing.*;
 import javax.swing.text.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.*;
-public class EditorWindow extends JFrame {
 
-    private final BlockCRDT localDoc = new BlockCRDT();
+//rovana
+public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListener {
+
+    // CRDT / session state
+    private BlockCRDT localDoc = new BlockCRDT();
     private int siteId = 1;
     private BlockID currentBlockId;
+    private String currentDocId = null;
 
+    // UI components
     private JTextPane textPane;
     private JLabel statusLabel;
-    private JLabel usersLabel;
     private JTextField docIdField;
     private JTextField siteIdField;
     private JButton connectBtn;
     private JButton boldBtn;
     private JButton italicBtn;
+    private FileToolbar fileToolbar;
+    private JButton shareBtn;        // 🔗 share doc ID
+    private JLabel usersLabel;      // 👥 active users
+    private JToggleButton viewerBtn; // 👁 viewer/editor toggle
 
     private final Map<Integer, Integer> remoteCursors = new LinkedHashMap<>();
     private static final Color[] USER_COLORS = {
-            new Color(200, 50, 50),
-            new Color(50, 100, 200),
-            new Color(30, 160, 30),
+            new Color(200, 50,  50),
+            new Color(50,  100, 200),
+            new Color(30,  160, 30),
             new Color(200, 130, 0)
     };
 
     private boolean isUpdating = false;
 
+    // Constructor
     public EditorWindow() {
-        super("Collaborative Text Editor — Team 2");
+        super("Team 2 ");
         buildUI();
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(960, 720);
+        setSize(1000, 750);
         setLocationRelativeTo(null);
     }
 
-
+    // UI construction
     private void buildUI() {
-        JPanel connectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        connectPanel.setBorder(BorderFactory.createTitledBorder("Join Session"));
 
-        connectPanel.add(new JLabel("Doc ID:"));
-        docIdField = new JTextField("myDoc", 12);
-        connectPanel.add(docIdField);
+        // ===== MENU BAR ===== //might be deleted later
+        JMenuBar menuBar = new JMenuBar();
+        menuBar.add(new JMenu("File"));
+        menuBar.add(new JMenu("Edit"));
+        menuBar.add(new JMenu("Insert"));
+        menuBar.add(new JMenu("View"));
+        setJMenuBar(menuBar);
 
-        connectPanel.add(new JLabel("My Site ID (1–4):"));
-        siteIdField = new JTextField("1", 4);
-        connectPanel.add(siteIdField);
+        // ===== FILE TOOLBAR =====
+        fileToolbar = new FileToolbar(this, siteId);
+        fileToolbar.setToolbarListener(this);
 
+        // ===== CONNECT PANEL =====
+        JPanel connectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        docIdField = new JTextField("myDoc", 10);
+        siteIdField = new JTextField("1", 3);
         connectBtn = new JButton("Connect");
+
+        connectPanel.add(new JLabel("Doc:"));
+        connectPanel.add(docIdField);
+        connectPanel.add(new JLabel("Site:"));
+        connectPanel.add(siteIdField);
         connectPanel.add(connectBtn);
 
-        statusLabel = new JLabel("  Not connected");
-        statusLabel.setForeground(Color.GRAY);
-        connectPanel.add(statusLabel);
-
+        // ===== TOOLBAR =====
         JToolBar toolbar = new JToolBar();
         toolbar.setFloatable(false);
-        toolbar.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
 
-        boldBtn = new JButton("Bold");
-        boldBtn.setFont(boldBtn.getFont().deriveFont(Font.BOLD));
+        boldBtn = new JButton("B");
+        boldBtn.setFont(new Font("Arial", Font.BOLD, 14));
         boldBtn.setEnabled(false);
-        boldBtn.setToolTipText("Toggle bold on selected text");
+        boldBtn.setToolTipText("Bold");
 
-        italicBtn = new JButton("Italic");
-        italicBtn.setFont(italicBtn.getFont().deriveFont(Font.ITALIC));
+        italicBtn = new JButton("I");
+        italicBtn.setFont(new Font("Arial", Font.ITALIC, 14));
         italicBtn.setEnabled(false);
-        italicBtn.setToolTipText("Toggle italic on selected text");
+        italicBtn.setToolTipText("Italic");
 
-        usersLabel = new JLabel("  Online: (none)");
+        //  Share button — shows Doc ID in a dialog
+        shareBtn = new JButton("\uD83D\uDD17");
+        shareBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14));
+        shareBtn.setToolTipText("Share document code");
+        shareBtn.setEnabled(false);
+        shareBtn.addActionListener(e -> {
+            if (currentDocId != null) {
+                JOptionPane.showMessageDialog(this,
+                        "Share this code with collaborators:\n\n" + currentDocId,
+                        "Share Document", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+
+        //  Active users label
+        usersLabel = new JLabel("\uD83D\uDC65 Only you");
+        usersLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 13));
         usersLabel.setForeground(Color.DARK_GRAY);
+        usersLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+
+        //  Viewer/Editor toggle
+        viewerBtn = new JToggleButton("\uD83D\uDC41 Viewer");
+        viewerBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 13));
+        viewerBtn.setToolTipText("Toggle viewer mode (read-only)");
+        viewerBtn.setEnabled(false);
+        viewerBtn.addActionListener(e -> {
+            boolean isViewer = viewerBtn.isSelected();
+            textPane.setEnabled(!isViewer);
+            boldBtn.setEnabled(!isViewer);
+            italicBtn.setEnabled(!isViewer);
+            shareBtn.setVisible(!isViewer); // viewers can't see share code
+            viewerBtn.setText(isViewer ? "\uD83D\uDC41 Viewer" : "\u270F\uFE0F Editor");
+        });
 
         toolbar.add(boldBtn);
-        toolbar.add(new JToolBar.Separator());
         toolbar.add(italicBtn);
         toolbar.add(new JToolBar.Separator());
+        toolbar.add(shareBtn);
+        toolbar.add(new JToolBar.Separator());
         toolbar.add(usersLabel);
+        toolbar.add(new JToolBar.Separator());
+        toolbar.add(viewerBtn);
 
+        // ===== TEXT AREA =====
         textPane = new JTextPane();
-        textPane.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        textPane.setFont(new Font("Arial", Font.PLAIN, 16));
+        textPane.setMargin(new Insets(12, 12, 12, 12));
         textPane.setEnabled(false);
-        textPane.setBackground(new Color(252, 252, 252));
-        textPane.setMargin(new Insets(8, 8, 8, 8));
 
         JScrollPane scrollPane = new JScrollPane(textPane);
-        scrollPane.setBorder(BorderFactory.createTitledBorder("Document"));
+        scrollPane.setBorder(null);
 
-        JPanel northPanel = new JPanel();
-        northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.Y_AXIS));
-        northPanel.add(connectPanel);
-        northPanel.add(toolbar);
-
+        // ===== STATUS BAR =====
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        bottomPanel.setBorder(BorderFactory.createEtchedBorder());
-        bottomPanel.add(new JLabel("Team 2 — Collaborative Plain Text Editor"));
+        statusLabel = new JLabel("Not connected");
+        statusLabel.setForeground(Color.GRAY);
+        bottomPanel.add(statusLabel);
 
-        setLayout(new BorderLayout(5, 5));
-        add(northPanel, BorderLayout.NORTH);
+        // ===== TOP PANEL =====
+        JPanel topPanel = new JPanel();
+        topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
+        topPanel.add(fileToolbar);
+        topPanel.add(connectPanel);
+        topPanel.add(toolbar);
+
+        setLayout(new BorderLayout());
+        add(topPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
         add(bottomPanel, BorderLayout.SOUTH);
 
+        // ===== EVENT WIRING =====
         connectBtn.addActionListener(e -> handleConnect());
         boldBtn.addActionListener(e -> handleFormatting("bold"));
         italicBtn.addActionListener(e -> handleFormatting("italic"));
@@ -116,6 +171,173 @@ public class EditorWindow extends JFrame {
         setupCaretListener();
     }
 
+    // FileToolbar.FileToolbarListener implementation
+
+    @Override
+    public void onDocumentLoaded(String docId, BlockCRDT doc) {
+        if (NetworkManager.getInstance().isConnected()) {
+            NetworkManager.getInstance().disconnect();
+        }
+
+        synchronized (this) {
+            localDoc = doc;
+            currentDocId = docId;
+            currentBlockId = null;
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            docIdField.setText(docId);
+            docIdField.setEnabled(true);
+            siteIdField.setEnabled(true);
+            connectBtn.setEnabled(true);
+
+            textPane.setEnabled(false);
+            boldBtn.setEnabled(false);
+            italicBtn.setEnabled(false);
+
+            statusLabel.setText("Document '" + docId + "' ready — click Connect");
+            statusLabel.setForeground(new Color(0, 100, 200));
+
+            updateWindowTitle();
+            refreshDisplay();
+        });
+    }
+
+    @Override
+    public void onRenameRequested(String newName) {
+        SwingUtilities.invokeLater(() -> {
+            currentDocId = newName;
+            docIdField.setText(newName);
+            updateWindowTitle();
+            statusLabel.setText("Renamed to '" + newName + "'");
+            statusLabel.setForeground(new Color(0, 130, 0));
+        });
+    }
+
+    @Override
+    public void onDeleteRequested() {
+        if (NetworkManager.getInstance().isConnected()) {
+            NetworkManager.getInstance().disconnect();
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            synchronized (this) {
+                localDoc = new BlockCRDT();
+                currentDocId = null;
+                currentBlockId = null;
+            }
+            remoteCursors.clear();
+
+            docIdField.setText("myDoc");
+            docIdField.setEnabled(true);
+            siteIdField.setEnabled(true);
+            connectBtn.setEnabled(true);
+
+            textPane.setEnabled(false);
+            boldBtn.setEnabled(false);
+            italicBtn.setEnabled(false);
+
+            statusLabel.setText("Document deleted — create or connect to a new one");
+            statusLabel.setForeground(Color.GRAY);
+
+            updateWindowTitle();
+            refreshDisplay();
+        });
+    }
+
+    @Override
+    public void onStatusMessage(String message) {
+        SwingUtilities.invokeLater(() -> {
+            statusLabel.setText(message);
+            statusLabel.setForeground(Color.DARK_GRAY);
+        });
+    }
+
+    @Override
+    public BlockCRDT getCurrentDocument() {
+        return localDoc;
+    }
+
+    @Override
+    public String getCurrentDocId() {
+        return currentDocId;
+    }
+
+    // update window title
+    private void updateWindowTitle() {
+        if (currentDocId != null && !currentDocId.isEmpty()) {
+            setTitle("Collaborative Text Editor — " + currentDocId + " — Team 2");
+        } else {
+            setTitle("Collaborative Text Editor — Team 2");
+        }
+    }
+
+    // WebSocket connect
+    private void handleConnect() {
+        String docId = docIdField.getText().trim();
+        if (docId.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter a Doc ID");
+            return;
+        }
+        try {
+            siteId = Integer.parseInt(siteIdField.getText().trim());
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Site ID must be a number (1, 2, 3, or 4)");
+            return;
+        }
+
+        fileToolbar.updateSiteId(siteId);
+
+        currentDocId = docId;
+        updateWindowTitle();
+
+        OperationApplier applier = new OperationApplier(localDoc);
+
+        applier.setOnDocumentChanged(() ->
+                SwingUtilities.invokeLater(this::refreshDisplay));
+
+        applier.setOnCursorUpdate((remoteSiteId, position) ->
+                SwingUtilities.invokeLater(() -> {
+                    remoteCursors.put(remoteSiteId, position);
+                    updateUsersLabel();
+                }));
+
+        applier.setOnConnected(() -> SwingUtilities.invokeLater(() -> {
+            currentBlockId = new BlockID(siteId, 1);
+            if (localDoc.findBlock(currentBlockId) == null) {
+                Block firstBlock = new Block(currentBlockId, null);
+                synchronized (localDoc) { localDoc.addBlock(firstBlock); }
+                NetworkManager.getInstance().sendInsertBlock(currentBlockId, null);
+            }
+            statusLabel.setText("Connected — " + docId + "  (site " + siteId + ")");
+            statusLabel.setForeground(new Color(0, 130, 0));
+            textPane.setEnabled(true);
+            boldBtn.setEnabled(true);
+            italicBtn.setEnabled(true);
+            shareBtn.setEnabled(true);
+            viewerBtn.setEnabled(true);
+            connectBtn.setEnabled(false);
+            docIdField.setEnabled(false);
+            siteIdField.setEnabled(false);
+            textPane.requestFocus();
+        }));
+
+        applier.setOnDisconnected(() -> SwingUtilities.invokeLater(() -> {
+            statusLabel.setText("Disconnected");
+            statusLabel.setForeground(Color.RED);
+            textPane.setEnabled(false);
+            boldBtn.setEnabled(false);
+            italicBtn.setEnabled(false);
+            shareBtn.setEnabled(false);
+            viewerBtn.setEnabled(false);
+        }));
+
+        NetworkManager.getInstance().connect("ws://localhost:8081", docId, siteId, applier);
+        statusLabel.setText("Connecting...");
+        statusLabel.setForeground(Color.ORANGE);
+    }
+
+    // Key / caret listeners
 
     private void setupKeyListener() {
         textPane.addKeyListener(new KeyAdapter() {
@@ -150,63 +372,7 @@ public class EditorWindow extends JFrame {
         });
     }
 
-
-    private void handleConnect() {
-        String docId = docIdField.getText().trim();
-        if (docId.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please enter a Doc ID");
-            return;
-        }
-        try {
-            siteId = Integer.parseInt(siteIdField.getText().trim());
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Site ID must be a number (1, 2, 3, or 4)");
-            return;
-        }
-
-        OperationApplier applier = new OperationApplier(localDoc);
-
-        applier.setOnDocumentChanged(() ->
-                SwingUtilities.invokeLater(this::refreshDisplay));
-
-        applier.setOnCursorUpdate((remoteSiteId, position) ->
-                SwingUtilities.invokeLater(() -> {
-                    remoteCursors.put(remoteSiteId, position);
-                    updateUsersLabel();
-                }));
-
-        applier.setOnConnected(() -> SwingUtilities.invokeLater(() -> {
-            currentBlockId = new BlockID(siteId, 1);
-            if (localDoc.findBlock(currentBlockId) == null) {
-                Block firstBlock = new Block(currentBlockId, null);
-                synchronized (localDoc) { localDoc.addBlock(firstBlock); }
-                NetworkManager.getInstance().sendInsertBlock(currentBlockId, null);
-            }
-            statusLabel.setText("  Connected — " + docId + "  (site " + siteId + ")");
-            statusLabel.setForeground(new Color(0, 130, 0));
-            textPane.setEnabled(true);
-            boldBtn.setEnabled(true);
-            italicBtn.setEnabled(true);
-            connectBtn.setEnabled(false);
-            docIdField.setEnabled(false);
-            siteIdField.setEnabled(false);
-            textPane.requestFocus();
-        }));
-
-        applier.setOnDisconnected(() -> SwingUtilities.invokeLater(() -> {
-            statusLabel.setText("  Disconnected");
-            statusLabel.setForeground(Color.RED);
-            textPane.setEnabled(false);
-            boldBtn.setEnabled(false);
-            italicBtn.setEnabled(false);
-        }));
-
-        NetworkManager.getInstance().connect("ws://localhost:8081", docId, siteId, applier);
-        statusLabel.setText("  Connecting...");
-        statusLabel.setForeground(Color.ORANGE);
-    }
-
-
+    // Edit operations
     private void handleInsertChar(char ch) {
         int caretPos = textPane.getCaretPosition();
         Object[] blockAndIndex = findBlockAtCaret(caretPos);
@@ -232,7 +398,6 @@ public class EditorWindow extends JFrame {
         textPane.setCaretPosition(Math.min(caretPos + 1, getDocumentLength()));
     }
 
-
     private void handleBackspace() {
         int caretPos = textPane.getCaretPosition();
         if (caretPos == 0) return;
@@ -253,15 +418,11 @@ public class EditorWindow extends JFrame {
 
         String blockIdStr = NetworkManager.getInstance().blockIdToString(block.getMyId());
 
-        synchronized (localDoc) {
-            toDelete.markDeleted();
-        }
-
+        synchronized (localDoc) { toDelete.markDeleted(); }
         NetworkManager.getInstance().sendDeleteChar(blockIdStr, toDelete.getMyId());
         refreshDisplay();
         textPane.setCaretPosition(Math.max(0, caretPos - 1));
     }
-
 
     private void handleDeleteForward() {
         int caretPos = textPane.getCaretPosition();
@@ -287,7 +448,6 @@ public class EditorWindow extends JFrame {
         textPane.setCaretPosition(caretPos);
     }
 
-
     private void handleEnter() {
         int caretPos = textPane.getCaretPosition();
         Object[] blockAndIndex = findBlockAtCaret(caretPos);
@@ -298,7 +458,6 @@ public class EditorWindow extends JFrame {
         int blockLen = block.getContent().getLength();
 
         BlockID newBlockId = NetworkManager.getInstance().generateBlockID();
-        String blockIdStr = NetworkManager.getInstance().blockIdToString(block.getMyId());
 
         if (localIndex == 0 || localIndex >= blockLen) {
             synchronized (localDoc) {
@@ -318,7 +477,6 @@ public class EditorWindow extends JFrame {
         refreshDisplay();
         textPane.setCaretPosition(Math.min(caretPos + 1, getDocumentLength()));
     }
-
 
     private void handleMergeWithPrevious(Block block) {
         Block prevBlock = null;
@@ -361,7 +519,6 @@ public class EditorWindow extends JFrame {
         textPane.setCaretPosition(caretPos);
     }
 
-
     private void handleFormatting(String formatType) {
         int start = textPane.getSelectionStart();
         int end   = textPane.getSelectionEnd();
@@ -375,7 +532,8 @@ public class EditorWindow extends JFrame {
             for (CharNode node : block.getContent().allNodes) {
                 if (node.checkDeleted()) continue;
                 if (offset >= start && offset < end) {
-                    boolean newValue = formatType.equals("bold") ? !node.checkBold() : !node.checkItalic();
+                    boolean newValue = formatType.equals("bold")
+                            ? !node.checkBold() : !node.checkItalic();
                     synchronized (localDoc) {
                         block.getContent().applyFormatting(node.getMyId(), formatType, newValue);
                     }
@@ -385,11 +543,10 @@ public class EditorWindow extends JFrame {
             }
             offset++;
         }
-
         refreshDisplay();
     }
 
-
+    // Display refresh
     private void refreshDisplay() {
         isUpdating = true;
         int savedCaret = textPane.getCaretPosition();
@@ -411,8 +568,8 @@ public class EditorWindow extends JFrame {
                     SimpleAttributeSet style = new SimpleAttributeSet();
                     if (node.checkBold())   StyleConstants.setBold(style, true);
                     if (node.checkItalic()) StyleConstants.setItalic(style, true);
-                    StyleConstants.setFontFamily(style, "Monospaced");
-                    StyleConstants.setFontSize(style, 14);
+                    StyleConstants.setFontFamily(style, "Arial");
+                    StyleConstants.setFontSize(style, 16);
                     doc.insertString(doc.getLength(), String.valueOf(node.getMyChar()), style);
                 }
             }
@@ -428,12 +585,11 @@ public class EditorWindow extends JFrame {
         }
     }
 
-
     private void drawRemoteCursors(StyledDocument doc) throws BadLocationException {
         for (Map.Entry<Integer, Integer> entry : remoteCursors.entrySet()) {
             int remoteSiteId = entry.getKey();
             int position     = entry.getValue();
-            if (remoteSiteId == siteId) continue;  // skip ourselves
+            if (remoteSiteId == siteId) continue;
 
             int docLen = doc.getLength();
             if (position > docLen) position = docLen;
@@ -445,18 +601,13 @@ public class EditorWindow extends JFrame {
             StyleConstants.setForeground(cursorStyle, Color.WHITE);
             StyleConstants.setBold(cursorStyle, true);
 
-            String marker = "|" + remoteSiteId;
-            doc.insertString(position, marker, cursorStyle);
+            doc.insertString(position, "|" + remoteSiteId, cursorStyle);
         }
     }
 
     private void sendCursorUpdate(int caretPos) {
         if (!NetworkManager.getInstance().isConnected()) return;
         try {
-            JSONObject json = new JSONObject();
-            json.put("type", "cursor_update");
-            json.put("siteId", siteId);
-            json.put("position", caretPos);
             NetworkManager.getInstance().sendCursorUpdate(siteId, caretPos);
         } catch (Exception e) {
             System.err.println("[EditorWindow] Cursor update failed: " + e.getMessage());
@@ -465,23 +616,14 @@ public class EditorWindow extends JFrame {
 
     private void updateUsersLabel() {
         if (remoteCursors.isEmpty()) {
-            usersLabel.setText("  Online: only you");
+            usersLabel.setText("\uD83D\uDC65 Only you");
             return;
         }
-        StringBuilder sb = new StringBuilder("  Online: you");
-        for (Map.Entry<Integer, Integer> entry : remoteCursors.entrySet()) {
-            int id = entry.getKey();
-            if (id == siteId) continue;
-            Color c = USER_COLORS[id % USER_COLORS.length];
-            sb.append(" | ")
-                    .append("<font color='#")
-                    .append(String.format("%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue()))
-                    .append("'>User ").append(id).append("</font>");
-        }
-        usersLabel.setText("<html>" + sb + "</html>");
+        long others = remoteCursors.keySet().stream().filter(id -> id != siteId).count();
+        usersLabel.setText("\uD83D\uDC65 You + " + others + " other" + (others > 1 ? "s" : ""));
     }
 
-
+    // CRDT helpers
     private Object[] findBlockAtCaret(int caretPos) {
         int offset = 0;
         for (Block block : localDoc.allBlocks) {
