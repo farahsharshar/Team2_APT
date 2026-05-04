@@ -8,26 +8,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Person C — Phase 3: Join-by-Code Dialog
- *
- * Shows a dialog where the user pastes or types a share code (editor or viewer).
- * On submit it calls POST /api/share/join?code=XXXX and returns a JoinResult
- * containing the resolved docId and role.
- *
- * Usage:
- *   JoinDialog.JoinResult result = JoinDialog.show(parentFrame);
- *   if (result != null) {
- *       // result.docId() — document to open
- *       // result.role()  — "EDITOR" or "VIEWER"
- *   }
- */
 public class JoinDialog {
 
     private static final String SERVER_BASE = "http://localhost:8080";
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
-    /** Blocks until the user cancels or a valid code is resolved. Returns null on cancel. */
     public static JoinResult show(Component parent) {
 
         JPanel panel = new JPanel(new BorderLayout(8, 8));
@@ -55,7 +40,7 @@ public class JoinDialog {
                     JOptionPane.OK_CANCEL_OPTION,
                     JOptionPane.PLAIN_MESSAGE);
 
-            if (choice != JOptionPane.OK_OPTION) return null;   // user cancelled
+            if (choice != JOptionPane.OK_OPTION) return null;
 
             String code = codeField.getText().trim().toUpperCase();
             if (code.length() != 8) {
@@ -75,7 +60,6 @@ public class JoinDialog {
                 HttpResponse<String> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
 
                 if (resp.statusCode() == 200) {
-                    // Parse the simple JSON manually — avoids adding a heavy JSON lib on the client
                     String body = resp.body();
                     String docId = extractJson(body, "docId");
                     String role  = extractJson(body, "role");
@@ -91,9 +75,7 @@ public class JoinDialog {
         }
     }
 
-    /** Very small JSON field extractor — only reads simple string fields. */
     private static String extractJson(String json, String key) {
-        // looks for: "key":"value"
         String search = "\"" + key + "\":\"";
         int start = json.indexOf(search);
         if (start < 0) return "";
@@ -102,9 +84,6 @@ public class JoinDialog {
         return end < 0 ? "" : json.substring(start, end);
     }
 
-    // ------------------------------------------------------------------
-
-    /** Immutable result returned from the dialog on successful code resolution. */
     public record JoinResult(String docId, String role) {
         public boolean isViewer() { return "VIEWER".equalsIgnoreCase(role); }
         public boolean isEditor() { return "EDITOR".equalsIgnoreCase(role); }

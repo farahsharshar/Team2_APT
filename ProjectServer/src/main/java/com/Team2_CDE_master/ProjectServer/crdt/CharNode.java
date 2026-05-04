@@ -4,7 +4,7 @@ public class CharNode {
     CharID myId;
     CharID parentId;
     char myChar;
-    boolean isDeleted;  
+    boolean isDeleted;
     boolean isBold;
     boolean isItalic;
 
@@ -12,7 +12,7 @@ public class CharNode {
         this.myId = myId;
         this.parentId = parentId;
         this.myChar = myChar;
-        this.isDeleted = false;  
+        this.isDeleted = false;
         this.isBold = false;
         this.isItalic = false;
     }

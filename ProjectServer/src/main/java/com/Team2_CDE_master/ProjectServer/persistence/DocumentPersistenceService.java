@@ -9,8 +9,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-// Handles saving and loading the CRDT document structure to/from the database.
-// This is the main class that bridges between BlockCRDT (in-memory) and the DB tables.
 @Service
 public class DocumentPersistenceService {
 
@@ -23,14 +21,8 @@ public class DocumentPersistenceService {
     @Autowired
     private CharNodeRepository charNodeRepository;
 
-    // -------------------------------------------------------------------------
-    // SAVE — serializes a full BlockCRDT to the database
-    // If the document already exists, it is overwritten (all rows are replaced).
-    // Returns the DocumentEntity that was saved.
-    // -------------------------------------------------------------------------
     @Transactional
     public DocumentEntity saveDocument(BlockCRDT doc, String docId, String docName) {
-        // 1. Upsert the document metadata row
         DocumentEntity docEntity = documentRepository.findById(docId)
                 .orElse(new DocumentEntity(docId, docName));
         docEntity.setName(docName);
@@ -40,18 +32,14 @@ public class DocumentPersistenceService {
         }
         documentRepository.save(docEntity);
 
-        // 2. Delete existing block and char data so we start fresh
-        //    (We do a full replace on every save — simple but reliable)
         charNodeRepository.deleteByDocumentId(docId);
         blockRepository.deleteByDocumentId(docId);
 
-        // 3. Walk every block and every char node and write them to the DB
         List<BlockEntity> blockRows = new ArrayList<>();
         List<CharNodeEntity> charRows = new ArrayList<>();
 
         int blockOrder = 0;
         for (Block block : doc.allBlocks) {
-            // Build the block row
             BlockEntity be = new BlockEntity();
             be.setDocumentId(docId);
             be.setBlockSiteId(block.getMyId().siteId);
@@ -65,7 +53,6 @@ public class DocumentPersistenceService {
             }
             blockRows.add(be);
 
-            // Build a row for each char node in this block (including tombstones)
             int charOrder = 0;
             for (CharNode node : block.getContent().allNodes) {
                 CharNodeEntity ce = new CharNodeEntity();
@@ -88,7 +75,6 @@ public class DocumentPersistenceService {
             }
         }
 
-        // Batch insert for efficiency
         blockRepository.saveAll(blockRows);
         charNodeRepository.saveAll(charRows);
 
@@ -97,11 +83,6 @@ public class DocumentPersistenceService {
         return docEntity;
     }
 
-    // -------------------------------------------------------------------------
-    // LOAD — reconstructs a BlockCRDT from the database
-    // Returns null if the document ID is not found.
-    // After calling this, you can seed the in-memory session with the result.
-    // -------------------------------------------------------------------------
     @Transactional(readOnly = true)
     public BlockCRDT loadDocument(String docId) {
         if (!documentRepository.existsById(docId)) {
@@ -111,7 +92,6 @@ public class DocumentPersistenceService {
 
         BlockCRDT doc = new BlockCRDT();
 
-        // Load blocks in the order they were saved (ordering column = list position)
         List<BlockEntity> blockEntities =
                 blockRepository.findByDocumentIdOrderByOrdering(docId);
 
@@ -126,7 +106,6 @@ public class DocumentPersistenceService {
             Block block = new Block(blockId, parentId);
             if (be.isDeleted()) block.markDeleted();
 
-            // Load this block's char nodes in their saved order
             List<CharNodeEntity> charEntities =
                     charNodeRepository
                             .findByDocumentIdAndBlockSiteIdAndBlockCounterOrderByOrdering(
@@ -140,7 +119,6 @@ public class DocumentPersistenceService {
                     parentCharId = new CharID(ce.getParentSiteId(), ce.getParentNum());
                 }
 
-                // The charValue was stored as a single-character String
                 char ch = ce.getCharValue() != null && !ce.getCharValue().isEmpty()
                         ? ce.getCharValue().charAt(0) : ' ';
 
@@ -149,12 +127,9 @@ public class DocumentPersistenceService {
                 node.setBold(ce.isBold());
                 node.setItalic(ce.isItalic());
 
-                // addChar re-applies the CRDT ordering logic.
-                // Loading in saved order (parents before children) reproduces the same layout.
                 block.getContent().addChar(node);
             }
 
-            // addBlock re-applies block ordering — same reasoning as above
             doc.addBlock(block);
         }
 
@@ -163,17 +138,11 @@ public class DocumentPersistenceService {
         return doc;
     }
 
-    // -------------------------------------------------------------------------
-    // LIST — returns metadata for every saved document
-    // -------------------------------------------------------------------------
     @Transactional(readOnly = true)
     public List<DocumentEntity> listDocuments() {
         return documentRepository.findAll();
     }
 
-    // -------------------------------------------------------------------------
-    // DELETE — removes a document and all its blocks/chars from the DB
-    // -------------------------------------------------------------------------
     @Transactional
     public void deleteDocument(String docId) {
         charNodeRepository.deleteByDocumentId(docId);
@@ -182,9 +151,6 @@ public class DocumentPersistenceService {
         System.out.println("[Persistence] Deleted document '" + docId + "'");
     }
 
-    // -------------------------------------------------------------------------
-    // EXISTS — quick check used by the REST controller
-    // -------------------------------------------------------------------------
     public boolean documentExists(String docId) {
         return documentRepository.existsById(docId);
     }

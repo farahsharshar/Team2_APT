@@ -9,16 +9,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Person C — Phase 3: Sharing REST endpoints
- *
- * GET  /api/share/{docId}           → returns editor + viewer codes (caller must be EDITOR)
- *                                      The UI enforces this — viewers never call this endpoint.
- *
- * POST /api/share/join?code=XXXX    → resolves a code to { docId, role }
- *                                      Client sends a code typed/pasted by the user and
- *                                      gets back which document to open and in what role.
- */
 @RestController
 @RequestMapping("/api/share")
 public class ShareController {
@@ -29,14 +19,8 @@ public class ShareController {
     @Autowired
     private ShareCodeRepository shareCodeRepo;
 
-    // ------------------------------------------------------------------ //
-    //  GET /api/share/{docId}
-    //  Returns the two codes for a document.
-    //  The UI must only call this for EDITOR-role clients.
-    // ------------------------------------------------------------------ //
     @GetMapping("/{docId}")
     public ResponseEntity<?> getCodes(@PathVariable String docId) {
-        // Make sure the document actually exists (has an active session or was saved)
         BlockCRDT session = DocumentSession.get(docId);
         if (session == null) {
             return ResponseEntity.notFound().build();
@@ -44,7 +28,6 @@ public class ShareController {
 
         ShareRegistry.ShareCodes codes = shareRegistry.getOrCreate(docId);
 
-        // Persist codes to DB so they survive restarts
         persistIfNew(docId, codes);
 
         return ResponseEntity.ok(Map.of(
@@ -54,11 +37,6 @@ public class ShareController {
         ));
     }
 
-    // ------------------------------------------------------------------ //
-    //  POST /api/share/join?code=XXXXXXXX
-    //  Resolves a share code → { docId, role } so the client knows
-    //  which WebSocket room to join and whether it is an editor or viewer.
-    // ------------------------------------------------------------------ //
     @PostMapping("/join")
     public ResponseEntity<?> joinByCode(@RequestParam String code) {
         if (code == null || code.isBlank()) {
@@ -72,13 +50,9 @@ public class ShareController {
 
         return ResponseEntity.ok(Map.of(
                 "docId", result.docId(),
-                "role",  result.role().name()   // "EDITOR" or "VIEWER"
+                "role",  result.role().name()
         ));
     }
-
-    // ------------------------------------------------------------------ //
-    //  Internal helpers
-    // ------------------------------------------------------------------ //
 
     private void persistIfNew(String docId, ShareRegistry.ShareCodes codes) {
         Optional<ShareCodeEntity> existing = shareCodeRepo.findById(docId);

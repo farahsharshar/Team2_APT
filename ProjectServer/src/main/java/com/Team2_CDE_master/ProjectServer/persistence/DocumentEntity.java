@@ -3,13 +3,10 @@ package com.Team2_CDE_master.ProjectServer.persistence;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
-// Represents a saved document in the database.
-// Stores only metadata — the actual CRDT content is in BlockEntity and CharNodeEntity.
 @Entity
 @Table(name = "documents")
 public class DocumentEntity {
 
-    // The document's unique ID — same string used in the WebSocket URL (/document/{docId})
     @Id
     private String id;
 

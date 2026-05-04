@@ -12,27 +12,21 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-//rovana->backend logic bta3 ui
+
 public class FileManager {
 
-    // Listener interface
     public interface FileActionListener {
-        /* create import */
         void onDocumentLoaded(String docId, BlockCRDT doc);
-
-        /* status message to user */
         void onStatusMessage(String message);
     }
 
-    // Fields
     private final Component parentComponent;
-    private FileActionListener actionListener; //da el bridge
+    private FileActionListener actionListener;
     private int siteId;
-//backend endpoint
+
     private static final String SERVER_BASE = "http://localhost:8080";
     private final HttpClient http = HttpClient.newHttpClient();
 
-    // Constructor ll UI
     public FileManager(Component parentComponent) {
         this.parentComponent = parentComponent;
     }
@@ -44,10 +38,6 @@ public class FileManager {
         this.actionListener = listener;
     }
 
-    // Create btn
-    /* Ask user for name-> create a fresh BlockCRDT and notify
-       listener...  caller is responsible for sending the first block
-       WebSocket */
     public void createNewDocument() {
         String docId = JOptionPane.showInputDialog(
                 parentComponent,
@@ -63,7 +53,6 @@ public class FileManager {
 
         BlockCRDT newDoc = new BlockCRDT();
 
-        // Create one starter block so the user can begin typing immediately
         BlockID firstBlockId = new BlockID(siteId, 1);
         Block firstBlock = new Block(firstBlockId, null);
         newDoc.addBlock(firstBlock);
@@ -72,10 +61,6 @@ public class FileManager {
         if (actionListener != null) actionListener.onDocumentLoaded(docId, newDoc);
     }
 
-    // Import a .txt file
-    /*open  JFileChooser ->user pick a .txt file, then read it
-      line by line-> Each line becomes a Block each character becomes
-      a CharNode inside  block */
     public void importFile() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Import .txt File");
@@ -134,10 +119,6 @@ public class FileManager {
         }
     }
 
-    // Export current document to .txt file
-    /* Walk visible blocks and characters in the CRDT and write plain text
-      to a user-chosen file.  Formatting (bold/italic) is intentionally
-      dropped — export is .txt per the project spec.*/
     public void exportFile(BlockCRDT doc) {
         if (doc == null) {
             notify("No document to export.");
@@ -170,7 +151,6 @@ public class FileManager {
         }
     }
 
-    // Rename a document
     public String renameDocument(String currentDocId) {
         String newName = JOptionPane.showInputDialog(
                 parentComponent,
@@ -183,7 +163,6 @@ public class FileManager {
             return null;
         }
         newName = newName.trim();
-        //server connection
         try {
             String url = SERVER_BASE + "/api/documents?docId="
                     + java.net.URLEncoder.encode(newName, StandardCharsets.UTF_8)
@@ -201,19 +180,15 @@ public class FileManager {
             if (response.statusCode() == 200) {
                 notify("Document renamed to '" + newName + "' and saved.");
             } else {
-                // Rename locally even if server call fails (offline / not yet connected)
                 notify("Renamed to '" + newName + "' locally. Server responded: "
                         + response.statusCode());
             }
         } catch (Exception e) {
-            // Network not available — rename is still applied locally in the editor
             notify("Renamed to '" + newName + "' (no server connection: " + e.getMessage() + ").");
         }
 
         return newName;
     }
-
-    // Delete
 
     public boolean confirmDeleteDocument(String docId) {
         int choice = JOptionPane.showConfirmDialog(
@@ -227,7 +202,6 @@ public class FileManager {
             notify("Delete cancelled.");
             return false;
         }
-        //server connection
         try {
             String url = SERVER_BASE + "/api/documents/"
                     + java.net.URLEncoder.encode(docId, StandardCharsets.UTF_8);
@@ -243,7 +217,6 @@ public class FileManager {
             if (response.statusCode() == 200) {
                 notify("Document '" + docId + "' deleted from server.");
             } else if (response.statusCode() == 404) {
-                // Not yet persisted on the server — that's fine, still remove locally
                 notify("Document '" + docId + "' was not on the server (may not have been saved yet).");
             } else {
                 notify("Server responded " + response.statusCode()
@@ -256,8 +229,6 @@ public class FileManager {
         return true;
     }
 
-
-    /**Build a plain-text string from the CRDT -->export */
     private String buildPlainText(BlockCRDT doc) {
         StringBuilder sb = new StringBuilder();
         boolean firstBlock = true;
@@ -274,7 +245,6 @@ public class FileManager {
         return sb.toString();
     }
 
-    /* Count total visible characters across all blocks */
     private int countChars(BlockCRDT doc) {
         int total = 0;
         for (Block block : doc.allBlocks) {

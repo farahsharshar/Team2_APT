@@ -1,7 +1,7 @@
 package com.Team2_CDE_master.ProjectServer.crdt;
 
 public class InsertOperation {
-    String blockId;     
+    String blockId;
     CharNode charToAdd;
 
     public InsertOperation(String blockId, CharNode charToAdd) {

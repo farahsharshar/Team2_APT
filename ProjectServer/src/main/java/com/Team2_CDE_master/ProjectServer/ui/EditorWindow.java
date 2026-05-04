@@ -1,8 +1,8 @@
-// FULL EditorWindow = ORIGINAL LOGIC + UPDATED UI + Person C Phase 3 (Sharing & Permissions)
-
 package com.Team2_CDE_master.ProjectServer.ui;
 
 import com.Team2_CDE_master.ProjectServer.client.OperationApplier;
+import com.Team2_CDE_master.ProjectServer.client.UndoRedoManager;
+import com.Team2_CDE_master.ProjectServer.client.UserPresenceManager;
 import com.Team2_CDE_master.ProjectServer.crdt.*;
 import com.Team2_CDE_master.ProjectServer.network.NetworkManager;
 
@@ -12,16 +12,13 @@ import java.awt.*;
 import java.awt.event.*;
 import java.util.*;
 
-// rovana (original) + Person C Phase 3 additions
 public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListener {
 
-    // CRDT / session state
     private BlockCRDT localDoc = new BlockCRDT();
     private int siteId = 1;
     private BlockID currentBlockId;
     private String currentDocId = null;
 
-    // UI components
     private JTextPane textPane;
     private JLabel statusLabel;
     private JTextField docIdField;
@@ -30,9 +27,9 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     private JButton boldBtn;
     private JButton italicBtn;
     private FileToolbar fileToolbar;
-    private JButton shareBtn;        // 🔗 share doc codes (editor only)
-    private JLabel usersLabel;       // 👥 active users
-    private JToggleButton viewerBtn; // 👁 role indicator (read-only, reflects server role)
+    private JButton shareBtn;
+    private JLabel usersLabel;
+    private JToggleButton viewerBtn;
 
     private final Map<Integer, Integer> remoteCursors = new LinkedHashMap<>();
     private static final Color[] USER_COLORS = {
@@ -44,9 +41,10 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
 
     private boolean isUpdating = false;
 
-    // =========================================================================
-    // Constructor
-    // =========================================================================
+    private final UndoRedoManager undoManager = new UndoRedoManager();
+    private final UserPresenceManager presenceManager = new UserPresenceManager();
+    private OperationApplier applier;
+
     public EditorWindow() {
         super("Team 2 ");
         buildUI();
@@ -55,12 +53,8 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         setLocationRelativeTo(null);
     }
 
-    // =========================================================================
-    // UI construction
-    // =========================================================================
     private void buildUI() {
 
-        // ===== MENU BAR =====
         JMenuBar menuBar = new JMenuBar();
         menuBar.add(new JMenu("File"));
         menuBar.add(new JMenu("Edit"));
@@ -68,11 +62,9 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         menuBar.add(new JMenu("View"));
         setJMenuBar(menuBar);
 
-        // ===== FILE TOOLBAR =====
         fileToolbar = new FileToolbar(this, siteId);
         fileToolbar.setToolbarListener(this);
 
-        // ===== CONNECT PANEL =====
         JPanel connectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         docIdField  = new JTextField("myDoc", 10);
         siteIdField = new JTextField("1", 3);
@@ -84,13 +76,11 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         connectPanel.add(siteIdField);
         connectPanel.add(connectBtn);
 
-        // --- Person C: "Join by Code" button ---
         JButton joinBtn = new JButton("Join by Code");
         joinBtn.setToolTipText("Join a shared document using an editor or viewer code");
         joinBtn.addActionListener(e -> handleJoinByCode());
         connectPanel.add(joinBtn);
 
-        // ===== TOOLBAR =====
         JToolBar toolbar = new JToolBar();
         toolbar.setFloatable(false);
 
@@ -104,32 +94,27 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         italicBtn.setEnabled(false);
         italicBtn.setToolTipText("Italic");
 
-        // --- Person C: Share button — fetches real editor/viewer codes from server ---
-        shareBtn = new JButton("\uD83D\uDD17");
+        shareBtn = new JButton("🔗");
         shareBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14));
         shareBtn.setToolTipText("Share document codes");
         shareBtn.setEnabled(false);
         shareBtn.addActionListener(e -> {
-            // Viewers are blocked: button is hidden, but guard anyway
             if (ViewerMode.isViewer()) return;
             if (currentDocId != null) {
                 ShareManager.showShareDialog(this, currentDocId);
             }
         });
 
-        // Active users label
-        usersLabel = new JLabel("\uD83D\uDC65 Only you");
+        usersLabel = new JLabel("👥 Only you");
         usersLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 13));
         usersLabel.setForeground(Color.DARK_GRAY);
         usersLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
 
-        // --- Person C: Role indicator (not a toggle — reflects server-assigned role) ---
-        viewerBtn = new JToggleButton("\uD83D\uDC41 Viewer");
+        viewerBtn = new JToggleButton("👁 Viewer");
         viewerBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 13));
         viewerBtn.setToolTipText("Your current role in this document");
         viewerBtn.setEnabled(false);
         viewerBtn.addActionListener(e -> {
-            // Revert any toggle attempt — users cannot self-promote
             viewerBtn.setSelected(ViewerMode.isViewer());
             if (ViewerMode.isViewer()) {
                 JOptionPane.showMessageDialog(this,
@@ -147,7 +132,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         toolbar.add(new JToolBar.Separator());
         toolbar.add(viewerBtn);
 
-        // ===== TEXT AREA =====
         textPane = new JTextPane();
         textPane.setFont(new Font("Arial", Font.PLAIN, 16));
         textPane.setMargin(new Insets(12, 12, 12, 12));
@@ -156,13 +140,11 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         JScrollPane scrollPane = new JScrollPane(textPane);
         scrollPane.setBorder(null);
 
-        // ===== STATUS BAR =====
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         statusLabel = new JLabel("Not connected");
         statusLabel.setForeground(Color.GRAY);
         bottomPanel.add(statusLabel);
 
-        // ===== TOP PANEL =====
         JPanel topPanel = new JPanel();
         topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
         topPanel.add(fileToolbar);
@@ -174,7 +156,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         add(scrollPane,  BorderLayout.CENTER);
         add(bottomPanel, BorderLayout.SOUTH);
 
-        // ===== EVENT WIRING =====
         connectBtn.addActionListener(e -> handleConnect());
         boldBtn.addActionListener(e -> handleFormatting("bold"));
         italicBtn.addActionListener(e -> handleFormatting("italic"));
@@ -182,13 +163,8 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         setupCaretListener();
     }
 
-    // =========================================================================
-    // FileToolbar.FileToolbarListener implementation
-    // =========================================================================
-
     @Override
     public void onDocumentLoaded(String docId, BlockCRDT doc) {
-        // Person C: direct open always means EDITOR role
         ViewerMode.reset();
 
         if (NetworkManager.getInstance().isConnected()) {
@@ -275,9 +251,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     @Override
     public String getCurrentDocId() { return currentDocId; }
 
-    // =========================================================================
-    // Window title
-    // =========================================================================
     private void updateWindowTitle() {
         if (currentDocId != null && !currentDocId.isEmpty()) {
             setTitle("Collaborative Text Editor — " + currentDocId + " — Team 2");
@@ -286,58 +259,35 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
     }
 
-    // =========================================================================
-    // Person C — Join by code flow
-    // =========================================================================
-
-    /**
-     * Opens the JoinDialog, resolves the code to a docId + role,
-     * sets the role in ViewerMode, then connects normally.
-     */
     private void handleJoinByCode() {
         JoinDialog.JoinResult result = JoinDialog.show(this);
-        if (result == null) return;   // user cancelled
+        if (result == null) return;
 
-        // Apply the server-assigned role BEFORE connecting
         ViewerMode.setRole(result.role());
 
-        // Pre-fill the Doc ID field with the resolved document name
         docIdField.setText(result.docId());
 
-        // Reflect role restrictions on the UI immediately
         applyRoleToUI();
 
-        // Connect as normal — the docId is already in the field
         handleConnect();
     }
 
-    /**
-     * Applies the current ViewerMode role to every UI element that cares.
-     * Call after role is set and after successful connect.
-     */
     private void applyRoleToUI() {
         boolean viewer = ViewerMode.isViewer();
 
-        // Text editing area
         textPane.setEnabled(!viewer);
 
-        // Formatting buttons
         boldBtn.setEnabled(!viewer);
         italicBtn.setEnabled(!viewer);
 
-        // Share button: viewers must NEVER see the codes (spec requirement)
         shareBtn.setVisible(!viewer);
         shareBtn.setEnabled(!viewer);
 
-        // Role indicator — reflects assigned role, not toggleable by user
         viewerBtn.setSelected(viewer);
         viewerBtn.setText(ViewerMode.label());
-        viewerBtn.setEnabled(false);   // purely informational
+        viewerBtn.setEnabled(false);
     }
 
-    // =========================================================================
-    // WebSocket connect
-    // =========================================================================
     private void handleConnect() {
         String docId = docIdField.getText().trim();
         if (docId.isEmpty()) {
@@ -356,7 +306,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         currentDocId = docId;
         updateWindowTitle();
 
-        OperationApplier applier = new OperationApplier(localDoc);
+        this.applier = new OperationApplier(localDoc);
 
         applier.setOnDocumentChanged(() ->
                 SwingUtilities.invokeLater(this::refreshDisplay));
@@ -367,6 +317,16 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                     updateUsersLabel();
                 }));
 
+        applier.setOnPresenceJoin((sid, uname) -> SwingUtilities.invokeLater(() -> {
+            presenceManager.addUser(sid, uname);
+            updateUsersLabel();
+        }));
+
+        applier.setOnPresenceLeave(sid -> SwingUtilities.invokeLater(() -> {
+            presenceManager.removeUser(sid);
+            updateUsersLabel();
+        }));
+
         applier.setOnConnected(() -> SwingUtilities.invokeLater(() -> {
             currentBlockId = new BlockID(siteId, 1);
             if (localDoc.findBlock(currentBlockId) == null) {
@@ -375,15 +335,18 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                 NetworkManager.getInstance().sendInsertBlock(currentBlockId, null);
             }
 
+            NetworkManager nm = NetworkManager.getInstance();
+            if (nm.getReconnectionHandler().isDisconnected()) {
+                nm.getReconnectionHandler().onReconnected(nm);
+            }
+
             String roleLabel = ViewerMode.isViewer() ? " [READ-ONLY]" : "";
             statusLabel.setText("Connected — " + docId + "  (site " + siteId + ")" + roleLabel);
             statusLabel.setForeground(new Color(0, 130, 0));
 
-            // Person C: apply role restrictions after connect
             applyRoleToUI();
 
-            // Only enable share/viewer indicator after connecting
-            viewerBtn.setEnabled(false);   // always informational only
+            viewerBtn.setEnabled(false);
 
             connectBtn.setEnabled(false);
             docIdField.setEnabled(false);
@@ -392,6 +355,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }));
 
         applier.setOnDisconnected(() -> SwingUtilities.invokeLater(() -> {
+            NetworkManager.getInstance().getReconnectionHandler().onDisconnected();
             statusLabel.setText("Disconnected");
             statusLabel.setForeground(Color.RED);
             textPane.setEnabled(false);
@@ -401,17 +365,12 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
             viewerBtn.setEnabled(false);
         }));
 
-        // Person C: pass role in the WebSocket URL so the server can enforce it
         String role = ViewerMode.isViewer() ? "VIEWER" : "EDITOR";
         NetworkManager.getInstance().connect("ws://localhost:8081", docId, siteId, applier, role);
 
         statusLabel.setText("Connecting...");
         statusLabel.setForeground(Color.ORANGE);
     }
-
-    // =========================================================================
-    // Key / caret listeners
-    // =========================================================================
 
     private void setupKeyListener() {
         textPane.addKeyListener(new KeyAdapter() {
@@ -433,6 +392,15 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
                     case KeyEvent.VK_BACK_SPACE -> { e.consume(); handleBackspace(); }
                     case KeyEvent.VK_ENTER      -> { e.consume(); handleEnter(); }
                     case KeyEvent.VK_DELETE     -> { e.consume(); handleDeleteForward(); }
+                    case KeyEvent.VK_Z -> {
+                        if (e.isControlDown()) { e.consume(); handleUndo(); }
+                    }
+                    case KeyEvent.VK_Y -> {
+                        if (e.isControlDown()) { e.consume(); handleRedo(); }
+                    }
+                    case KeyEvent.VK_V -> {
+                        if (e.isControlDown()) { e.consume(); handlePaste(); }
+                    }
                 }
             }
         });
@@ -446,12 +414,96 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         });
     }
 
-    // =========================================================================
-    // Edit operations  (Person C: all guarded with ViewerMode check)
-    // =========================================================================
+    private void handleUndo() {
+        if (ViewerMode.isViewer()) return;
+        if (!NetworkManager.getInstance().isConnected()) return;
+        String inv = undoManager.undo();
+        if (inv == null) return;
+        try {
+            applyLocalOp(new org.json.JSONObject(inv));
+            NetworkManager.getInstance().sendRawMessage(inv);
+            refreshDisplay();
+        } catch (Exception ex) {
+            System.err.println("[Undo] " + ex.getMessage());
+        }
+    }
+
+    private void handleRedo() {
+        if (ViewerMode.isViewer()) return;
+        if (!NetworkManager.getInstance().isConnected()) return;
+        String orig = undoManager.redo();
+        if (orig == null) return;
+        try {
+            applyLocalOp(new org.json.JSONObject(orig));
+            NetworkManager.getInstance().sendRawMessage(orig);
+            refreshDisplay();
+        } catch (Exception ex) {
+            System.err.println("[Redo] " + ex.getMessage());
+        }
+    }
+
+    private void handlePaste() {
+        if (ViewerMode.isViewer()) return;
+        if (!NetworkManager.getInstance().isConnected()) return;
+        try {
+            String txt = (String) java.awt.Toolkit.getDefaultToolkit()
+                .getSystemClipboard().getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+            if (txt == null || txt.isEmpty()) return;
+            for (int i = 0; i < txt.length(); i++) {
+                char c = txt.charAt(i);
+                if (c == '\n') handleEnter();
+                else if (c >= 32 && c < 127) handleInsertChar(c);
+            }
+        } catch (Exception ex) {
+            System.err.println("[Paste] " + ex.getMessage());
+        }
+    }
+
+    private void applyLocalOp(org.json.JSONObject j) {
+        String type = j.getString("type");
+        synchronized (localDoc) {
+            switch (type) {
+                case "insert_char" -> {
+                    Block b = findBlockStr(j.getString("blockId"));
+                    if (b == null) return;
+                    CharID cid = new CharID(j.getJSONObject("charId").getInt("siteId"), j.getJSONObject("charId").getInt("myNum"));
+                    CharID pid = j.isNull("parentId") ? null : new CharID(j.getJSONObject("parentId").getInt("siteId"), j.getJSONObject("parentId").getInt("myNum"));
+                    b.getContent().addChar(new CharNode(cid, pid, j.getString("char").charAt(0)));
+                }
+                case "delete_char" -> {
+                    Block b = findBlockStr(j.getString("blockId"));
+                    if (b == null) return;
+                    CharID cid = new CharID(j.getJSONObject("charId").getInt("siteId"), j.getJSONObject("charId").getInt("myNum"));
+                    CharNode n = b.getContent().findNode(cid);
+                    if (n != null) n.markDeleted();
+                }
+                case "insert_block" -> {
+                    BlockID bid = new BlockID(j.getJSONObject("blockId").getInt("siteId"), j.getJSONObject("blockId").getInt("counter"));
+                    BlockID par = j.isNull("parentBlockId") ? null : new BlockID(j.getJSONObject("parentBlockId").getInt("siteId"), j.getJSONObject("parentBlockId").getInt("counter"));
+                    if (localDoc.findBlock(bid) == null) localDoc.addBlock(new Block(bid, par));
+                }
+                case "delete_block" -> {
+                    BlockID bid = new BlockID(j.getJSONObject("blockId").getInt("siteId"), j.getJSONObject("blockId").getInt("counter"));
+                    localDoc.deleteBlock(bid);
+                }
+                case "formatting" -> {
+                    Block b = findBlockStr(j.getString("blockId"));
+                    if (b == null) return;
+                    CharID cid = new CharID(j.getJSONObject("charId").getInt("siteId"), j.getJSONObject("charId").getInt("myNum"));
+                    b.getContent().applyFormatting(cid, j.getString("formatType"), j.getBoolean("value"));
+                }
+                default -> {}
+            }
+        }
+    }
+
+    private Block findBlockStr(String s) {
+        String[] p = s.replace("B", "").split("_");
+        return localDoc.findBlock(new BlockID(Integer.parseInt(p[0]), Integer.parseInt(p[1])));
+    }
 
     private void handleInsertChar(char ch) {
-        if (ViewerMode.isViewer()) return;   // Person C: viewer guard
+        if (ViewerMode.isViewer()) return;
 
         int caretPos = textPane.getCaretPosition();
         Object[] blockAndIndex = findBlockAtCaret(caretPos);
@@ -473,12 +525,16 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
 
         NetworkManager.getInstance().sendInsertChar(blockIdStr, newCharId, parentId, ch);
 
+        String undo = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.deleteChar(blockIdStr, newCharId);
+        String orig = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.insertChar(blockIdStr, newCharId, parentId, ch);
+        undoManager.record(orig, undo);
+
         refreshDisplay();
         textPane.setCaretPosition(Math.min(caretPos + 1, getDocumentLength()));
     }
 
     private void handleBackspace() {
-        if (ViewerMode.isViewer()) return;   // Person C: viewer guard
+        if (ViewerMode.isViewer()) return;
 
         int caretPos = textPane.getCaretPosition();
         if (caretPos == 0) return;
@@ -497,16 +553,24 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         CharNode toDelete = getNodeAtVisiblePos(block, localIndex - 1);
         if (toDelete == null) return;
 
+        char savedChar = toDelete.getMyChar();
+        CharID savedParent = toDelete.getParentId();
+
         String blockIdStr = NetworkManager.getInstance().blockIdToString(block.getMyId());
 
         synchronized (localDoc) { toDelete.markDeleted(); }
         NetworkManager.getInstance().sendDeleteChar(blockIdStr, toDelete.getMyId());
+
+        String del = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.deleteChar(blockIdStr, toDelete.getMyId());
+        String ins = com.Team2_CDE_master.ProjectServer.network.OperationSerializer.insertChar(blockIdStr, toDelete.getMyId(), savedParent, savedChar);
+        undoManager.record(del, ins);
+
         refreshDisplay();
         textPane.setCaretPosition(Math.max(0, caretPos - 1));
     }
 
     private void handleDeleteForward() {
-        if (ViewerMode.isViewer()) return;   // Person C: viewer guard
+        if (ViewerMode.isViewer()) return;
 
         int caretPos = textPane.getCaretPosition();
         Object[] blockAndIndex = findBlockAtCaret(caretPos);
@@ -532,7 +596,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     }
 
     private void handleEnter() {
-        if (ViewerMode.isViewer()) return;   // Person C: viewer guard
+        if (ViewerMode.isViewer()) return;
 
         int caretPos = textPane.getCaretPosition();
         Object[] blockAndIndex = findBlockAtCaret(caretPos);
@@ -605,7 +669,7 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     }
 
     private void handleFormatting(String formatType) {
-        if (ViewerMode.isViewer()) return;   // Person C: viewer guard
+        if (ViewerMode.isViewer()) return;
 
         int start = textPane.getSelectionStart();
         int end   = textPane.getSelectionEnd();
@@ -632,10 +696,6 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
         }
         refreshDisplay();
     }
-
-    // =========================================================================
-    // Display refresh
-    // =========================================================================
 
     private void refreshDisplay() {
         isUpdating = true;
@@ -705,17 +765,10 @@ public class EditorWindow extends JFrame implements FileToolbar.FileToolbarListe
     }
 
     private void updateUsersLabel() {
-        if (remoteCursors.isEmpty()) {
-            usersLabel.setText("\uD83D\uDC65 Only you");
-            return;
-        }
-        long others = remoteCursors.keySet().stream().filter(id -> id != siteId).count();
-        usersLabel.setText("\uD83D\uDC65 You + " + others + " other" + (others > 1 ? "s" : ""));
+        int others = presenceManager.getCount();
+        if (others == 0) usersLabel.setText("👥 Only you");
+        else usersLabel.setText("👥 You + " + others + " other" + (others > 1 ? "s" : ""));
     }
-
-    // =========================================================================
-    // CRDT helpers
-    // =========================================================================
 
     private Object[] findBlockAtCaret(int caretPos) {
         int offset = 0;

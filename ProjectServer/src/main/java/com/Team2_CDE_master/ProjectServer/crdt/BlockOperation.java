@@ -1,14 +1,15 @@
 package com.Team2_CDE_master.ProjectServer.crdt;
+
 public class BlockOperation {
     String type;
     Block blockToAdd;
     BlockID targetId;
     BlockID splitTargetId;
-    int splitIndex;  
-    BlockID newBlockId; 
+    int splitIndex;
+    BlockID newBlockId;
     BlockID firstId;
     BlockID secondId;
-    
+
     public static BlockOperation insertBlock(Block block) {
         BlockOperation op = new BlockOperation();
         op.type = "insert_block";

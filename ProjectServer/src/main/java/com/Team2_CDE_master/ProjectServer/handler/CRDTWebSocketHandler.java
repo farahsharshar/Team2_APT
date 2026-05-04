@@ -13,36 +13,26 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import org.json.*;
 
-// @Component makes Spring manage this bean so @Autowired and @Scheduled work.
-// WebSocketConfig autowires this instead of calling "new CRDTWebSocketHandler()".
 @Component
 public class CRDTWebSocketHandler extends TextWebSocketHandler {
 
-    // Spring injects the persistence service — handles saving/loading to H2
     @Autowired
     private DocumentPersistenceService persistenceService;
 
-    // docId → set of active WebSocket sessions in that document's room
     private final Map<String, Set<WebSocketSession>> rooms = new ConcurrentHashMap<>();
 
-    // Person C — Phase 3: track each session's role ("EDITOR" or "VIEWER")
     private final Map<String, String> sessionRoles = new ConcurrentHashMap<>();
 
-    // -------------------------------------------------------------------------
-    // Connection lifecycle
-    // -------------------------------------------------------------------------
+    private final Map<String, Integer> sessionSiteIds = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         String docId = extractDocId(session);
         rooms.computeIfAbsent(docId, id -> Collections.synchronizedSet(new HashSet<>())).add(session);
 
-        // Person C — Phase 3: record this session's role from the ?role= query param
         String role = extractRole(session);
         sessionRoles.put(session.getId(), role);
 
-        // When the first client connects to a document, check the database.
-        // If this document was saved before, restore it so the client sees the old content.
         if (DocumentSession.get(docId) == null) {
             BlockCRDT saved = persistenceService.loadDocument(docId);
             if (saved != null) {
@@ -60,15 +50,11 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         Set<WebSocketSession> room = rooms.get(docId);
         if (room != null) room.remove(session);
 
-        // Person C — Phase 3: clean up the role entry
         sessionRoles.remove(session.getId());
+        sessionSiteIds.remove(session.getId());
 
         System.out.println("Client disconnected from doc: " + docId);
     }
-
-    // -------------------------------------------------------------------------
-    // Message handling
-    // -------------------------------------------------------------------------
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
@@ -77,20 +63,21 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         JSONObject json = new JSONObject(message.getPayload());
         String type = json.getString("type");
 
-        // Cursor updates are allowed for all roles — viewers can still show their cursor
         if (type.equals("cursor_update")) {
             broadcast(docId, message.getPayload(), session);
             return;
         }
 
-        // Person C — Phase 3: silently drop any edit operation from a VIEWER session.
-        // This is the server-side enforcement — a viewer who bypasses the UI
-        // still cannot modify the document.
+        if (type.equals("presence")) {
+            broadcast(docId, message.getPayload(), session);
+            return;
+        }
+
         String role = sessionRoles.getOrDefault(session.getId(), "VIEWER");
         if ("VIEWER".equals(role)) {
             System.out.println("[Security] Blocked edit op '" + type
                     + "' from VIEWER session: " + session.getId());
-            return;   // do NOT apply, do NOT broadcast
+            return;
         }
 
         BlockCRDT doc = DocumentSession.getOrCreate(docId);
@@ -101,10 +88,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
 
         broadcast(docId, message.getPayload(), session);
     }
-
-    // -------------------------------------------------------------------------
-    // Operation dispatch
-    // -------------------------------------------------------------------------
 
     private void applyOperation(BlockCRDT doc, String type, JSONObject json) {
         switch (type) {
@@ -191,10 +174,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         doc.mergeBlocks(firstId, secondId);
     }
 
-    // -------------------------------------------------------------------------
-    // Broadcast
-    // -------------------------------------------------------------------------
-
     private void broadcast(String docId, String payload, WebSocketSession sender) throws Exception {
         Set<WebSocketSession> room = rooms.get(docId);
         if (room == null) return;
@@ -204,10 +183,6 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
             }
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Parsers
-    // -------------------------------------------------------------------------
 
     private CharID parseCharID(JSONObject json) {
         return new CharID(json.getInt("siteId"), json.getInt("myNum"));
@@ -230,10 +205,8 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
         return path.substring(path.lastIndexOf('/') + 1);
     }
 
-    // Person C — Phase 3: read the ?role= query parameter from the WebSocket URI.
-    // Defaults to VIEWER if the parameter is absent or unrecognised — fail-safe.
     private String extractRole(WebSocketSession session) {
-        String query = session.getUri().getQuery();   // e.g. "role=EDITOR"
+        String query = session.getUri().getQuery();
         if (query == null) return "VIEWER";
         for (String param : query.split("&")) {
             String[] kv = param.split("=", 2);
@@ -241,15 +214,9 @@ public class CRDTWebSocketHandler extends TextWebSocketHandler {
                 return kv[1].trim().equalsIgnoreCase("EDITOR") ? "EDITOR" : "VIEWER";
             }
         }
-        return "VIEWER";   // safe default
+        return "VIEWER";
     }
 
-    // -------------------------------------------------------------------------
-    // Auto-save scheduler
-    // -------------------------------------------------------------------------
-
-    // Auto-save all active documents every 30 seconds.
-    // fixedDelay means: wait 30 s after the previous run finishes before running again.
     @Scheduled(fixedDelay = 30000)
     public void autoSaveAll() {
         Map<String, BlockCRDT> sessions = DocumentSession.getAllSessions();

@@ -1,7 +1,8 @@
 package com.Team2_CDE_master.ProjectServer.crdt;
+
 public class BlockID {
-    public int siteId; 
-    public int counter; 
+    public int siteId;
+    public int counter;
 
     public BlockID(int siteId, int counter) {
         this.siteId = siteId;

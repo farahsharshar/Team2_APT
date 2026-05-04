@@ -1,10 +1,11 @@
 package com.Team2_CDE_master.ProjectServer.crdt;
+
 public class Block {
-    BlockID myId;         
-    BlockID parentId;      
-    CharCRDT content; 
-    boolean isDeleted; 
-    
+    BlockID myId;
+    BlockID parentId;
+    CharCRDT content;
+    boolean isDeleted;
+
     public Block(BlockID myId, BlockID parentId) {
         this.myId = myId;
         this.parentId = parentId;

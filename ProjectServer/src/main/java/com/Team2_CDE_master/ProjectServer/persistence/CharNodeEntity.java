@@ -2,8 +2,6 @@ package com.Team2_CDE_master.ProjectServer.persistence;
 
 import jakarta.persistence.*;
 
-// Represents one CharNode from a CharCRDT stored in the database.
-// Each row is a single character (including tombstoned/deleted ones).
 @Entity
 @Table(name = "char_nodes")
 public class CharNodeEntity {
@@ -12,32 +10,25 @@ public class CharNodeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Which document this char node belongs to
     private String documentId;
 
-    // Which block this char node lives inside — matches a BlockEntity row
     private int blockSiteId;
     private int blockCounter;
 
-    // This character's unique CRDT identity: CharID(siteId, myNum)
     private int charSiteId;
     private int charNum;
 
-    // Parent char identity — null columns mean this char has no predecessor (first in block)
     private Integer parentSiteId;
     private Integer parentNum;
 
-    // The actual character — stored as a single-character String to avoid type mapping issues
     @Column(length = 4)
     private String charValue;
 
-    // Tombstone: true means deleted but kept for CRDT ordering
     private boolean deleted;
 
     private boolean bold;
     private boolean italic;
 
-    // Position in the allNodes list at save time — used to restore in the same order
     private int ordering;
 
     public CharNodeEntity() {}

@@ -9,25 +9,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Person C — Phase 3: Share Code Manager (client side)
- *
- * Responsible for:
- *   1. Fetching the editor + viewer codes from GET /api/share/{docId}
- *   2. Showing them to the user in a clean dialog with copy buttons
- *
- * This class must only be called when the local role is EDITOR.
- * ViewerMode blocks the share button in EditorWindow so viewers never reach here.
- */
 public class ShareManager {
 
     private static final String SERVER_BASE = "http://localhost:8080";
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
-    /**
-     * Fetches codes for docId and shows the share dialog.
-     * Must be called on the EDT or will dispatch via SwingUtilities.
-     */
     public static void showShareDialog(Component parent, String docId) {
         if (docId == null || docId.isBlank()) {
             JOptionPane.showMessageDialog(parent,
@@ -35,7 +21,6 @@ public class ShareManager {
             return;
         }
 
-        // Fetch codes in a background thread so we don't block the EDT
         new Thread(() -> {
             try {
                 String url = SERVER_BASE + "/api/share/"
@@ -75,10 +60,6 @@ public class ShareManager {
         }, "share-fetch").start();
     }
 
-    // ------------------------------------------------------------------ //
-    //  Private helpers
-    // ------------------------------------------------------------------ //
-
     private static void presentCodes(Component parent, String docId,
                                      String editorCode, String viewerCode) {
         JPanel panel = new JPanel(new GridBagLayout());
@@ -87,7 +68,6 @@ public class ShareManager {
         gbc.insets = new Insets(4, 4, 4, 4);
         gbc.anchor = GridBagConstraints.WEST;
 
-        // Title row
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 3;
         JLabel title = new JLabel("Share codes for: " + docId);
         title.setFont(new Font("Arial", Font.BOLD, 13));
@@ -95,7 +75,6 @@ public class ShareManager {
 
         gbc.gridwidth = 1;
 
-        // Editor code row
         gbc.gridx = 0; gbc.gridy = 1;
         panel.add(new JLabel("✏️  Editor code:"), gbc);
 
@@ -106,7 +85,6 @@ public class ShareManager {
         gbc.gridx = 2;
         panel.add(makeCopyButton(editorCode), gbc);
 
-        // Viewer code row
         gbc.gridx = 0; gbc.gridy = 2;
         panel.add(new JLabel("👁  Viewer code:"), gbc);
 
@@ -117,7 +95,6 @@ public class ShareManager {
         gbc.gridx = 2;
         panel.add(makeCopyButton(viewerCode), gbc);
 
-        // Footer hint
         gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 3;
         JLabel hint = new JLabel("<html><i>Share these codes over WhatsApp, email, etc.<br>"
                 + "Viewers cannot edit and cannot see codes.</i></html>");
@@ -149,14 +126,12 @@ public class ShareManager {
                    .getSystemClipboard()
                    .setContents(new StringSelection(code), null);
             btn.setText("Copied!");
-            // Reset label after 1.5 s
             new Timer(1500, t -> { btn.setText("Copy"); ((Timer)t.getSource()).stop(); })
                     .start();
         });
         return btn;
     }
 
-    /** Minimal JSON string field extractor. */
     private static String extractJson(String json, String key) {
         String search = "\"" + key + "\":\"";
         int start = json.indexOf(search);

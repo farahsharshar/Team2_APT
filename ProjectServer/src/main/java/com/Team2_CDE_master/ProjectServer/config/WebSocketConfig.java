@@ -6,14 +6,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.socket.config.annotation.*;
 
-// @EnableScheduling activates the @Scheduled(fixedDelay=...) auto-save in CRDTWebSocketHandler
 @Configuration
 @EnableWebSocket
 @EnableScheduling
 public class WebSocketConfig implements WebSocketConfigurer {
 
-    // Spring injects the singleton handler bean — we no longer call "new CRDTWebSocketHandler()"
-    // so that @Autowired and @Scheduled inside the handler actually work.
     @Autowired
     private CRDTWebSocketHandler handler;
 

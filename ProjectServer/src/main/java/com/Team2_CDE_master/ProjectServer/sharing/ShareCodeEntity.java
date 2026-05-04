@@ -2,17 +2,12 @@ package com.Team2_CDE_master.ProjectServer.sharing;
 
 import jakarta.persistence.*;
 
-/**
- * Person C — Phase 3
- * Persists the two share codes for each document across server restarts.
- * One row per document.
- */
 @Entity
 @Table(name = "share_codes")
 public class ShareCodeEntity {
 
     @Id
-    private String docId;          // same as DocumentEntity.id
+    private String docId;
 
     @Column(nullable = false, length = 16, unique = true)
     private String editorCode;

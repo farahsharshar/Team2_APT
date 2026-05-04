@@ -5,13 +5,6 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-/**
- * Person C — Phase 3
- *
- * Runs once after Spring Boot starts.
- * Reads all saved share codes from the DB and seeds them into the
- * in-memory ShareRegistry so codes remain stable across server restarts.
- */
 @Component
 public class ShareCodeLoader implements ApplicationRunner {
 

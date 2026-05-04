@@ -18,6 +18,8 @@ public class NetworkManager {
     private final AtomicInteger charCounter  = new AtomicInteger(0);
     private final AtomicInteger blockCounter = new AtomicInteger(0);
 
+    private final ReconnectionHandler reconnHandler = new ReconnectionHandler();
+
     private NetworkManager() {}
 
     public static NetworkManager getInstance() {
@@ -27,17 +29,11 @@ public class NetworkManager {
         return instance;
     }
 
-    // -------------------------------------------------------------------------
-    // Person C — Phase 3: added "role" parameter
-    // Appends ?role=EDITOR or ?role=VIEWER to the WebSocket URL so the server
-    // can enforce permissions for this session.
-    // -------------------------------------------------------------------------
     public void connect(String serverUrl, String docId, int siteId,
                         OperationListener listener, String role) {
         this.siteId    = siteId;
         this.listener  = listener;
 
-        // Sanitise role — default to VIEWER if unrecognised (fail-safe)
         String safeRole = (role != null && role.equalsIgnoreCase("EDITOR")) ? "EDITOR" : "VIEWER";
         String fullUrl  = serverUrl + "?role=" + safeRole;
 
@@ -52,6 +48,7 @@ public class NetworkManager {
     }
 
     public void disconnect() {
+        reconnHandler.onDisconnected();
         if (wsClient != null && wsClient.isOpen()) {
             wsClient.close();
         }
@@ -60,10 +57,6 @@ public class NetworkManager {
     public boolean isConnected() {
         return wsClient != null && wsClient.isOpen();
     }
-
-    // -------------------------------------------------------------------------
-    // ID generators
-    // -------------------------------------------------------------------------
 
     public CharID generateCharID() {
         return new CharID(siteId, charCounter.incrementAndGet());
@@ -81,9 +74,9 @@ public class NetworkManager {
         return siteId;
     }
 
-    // -------------------------------------------------------------------------
-    // Send helpers
-    // -------------------------------------------------------------------------
+    public ReconnectionHandler getReconnectionHandler() {
+        return reconnHandler;
+    }
 
     public void sendInsertChar(String blockId, CharID charId, CharID parentId, char ch) {
         if (!isConnected()) { System.err.println("Not connected"); return; }
@@ -126,7 +119,10 @@ public class NetworkManager {
     }
 
     public void sendRawMessage(String json) {
-        if (!isConnected()) { System.err.println("Not connected"); return; }
+        if (!isConnected()) {
+            reconnHandler.bufferOp(json);
+            return;
+        }
         wsClient.sendOperation(json);
     }
 

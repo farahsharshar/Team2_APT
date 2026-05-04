@@ -11,9 +11,6 @@ public class CRDTWebSocketClient extends WebSocketClient {
 
     private final OperationListener listener;
 
-    // "ws://localhost:8081"
-    // "myDoc123"
-    // ws://localhost:8081/document/myDoc123
     public CRDTWebSocketClient(String serverUrl, String docId, OperationListener listener)
             throws URISyntaxException {
         super(new URI(serverUrl + "/document/" + docId));

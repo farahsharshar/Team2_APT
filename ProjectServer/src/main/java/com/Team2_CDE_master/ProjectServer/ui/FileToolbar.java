@@ -4,41 +4,25 @@ import com.Team2_CDE_master.ProjectServer.crdt.BlockCRDT;
 
 import javax.swing.*;
 import java.awt.*;
-//rovana
+
 public class FileToolbar extends JPanel {
 
-    // Callback interface — parent window (EditorWindow) implements this
     public interface FileToolbarListener {
-        //on... better than do... (clean arch)
-        /*create or import-> send docid & CRDT ll EditorWindow*/
         void onDocumentLoaded(String docId, BlockCRDT doc);
-
-        /*rename to newName(string) */
         void onRenameRequested(String newName);
-
-        /*delete l current or clear editor */
         void onDeleteRequested();
-
-        /*Status msgs(done .. successful) */
         void onStatusMessage(String message);
-
-        /* Export */
         BlockCRDT getCurrentDocument();
-
-        /* Rename & Delete & connection-> can reach directly l EditorWindow*/
         String getCurrentDocId();
     }
-    // Fields
+
     private final FileManager fileManager;
     private FileToolbarListener toolbarListener;
 
-    // Constructor l toolbar
     public FileToolbar(Component parentComponent, int siteId) {
         fileManager = new FileManager(parentComponent);
         fileManager.setSiteId(siteId);
 
-        // connect FileManager with toolbar (vv imp)
-        //nested callback
         fileManager.setFileActionListener(new FileManager.FileActionListener() {
             @Override
             public void onDocumentLoaded(String docId, BlockCRDT doc) {
@@ -56,17 +40,14 @@ public class FileToolbar extends JPanel {
         buildUI();
     }
 
-    // Setup
     public void setToolbarListener(FileToolbarListener listener) {
         this.toolbarListener = listener;
     }
-    /* called by EditorWindow when the user changes the Site ID field and clicks Connect
-     so that new/import operations use the correct site ID for generating CRDT identifiers */
+
     public void updateSiteId(int newSiteId) {
         fileManager.setSiteId(newSiteId);
     }
 
-    // UI-Ux construction
     private void buildUI() {
         setLayout(new FlowLayout(FlowLayout.LEFT, 4, 4));
         setBorder(BorderFactory.createTitledBorder("File"));
